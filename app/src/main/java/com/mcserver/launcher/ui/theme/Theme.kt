@@ -1,7 +1,6 @@
 package com.mcserver.launcher.ui.theme
 
 import android.app.Activity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -10,7 +9,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private fun darkColorScheme(
+private fun buildDarkScheme(
     primary: Color, onPrimary: Color, primaryContainer: Color, onPrimaryContainer: Color,
     secondary: Color, onSecondary: Color, secondaryContainer: Color, onSecondaryContainer: Color,
     background: Color, onBackground: Color,
@@ -18,30 +17,27 @@ private fun darkColorScheme(
     surfaceVariant: Color, onSurfaceVariant: Color,
     error: Color, onError: Color,
     outline: Color
-): darkColorScheme {
-    // Using Material3 darkColorScheme builder
-    return androidx.compose.material3.darkColorScheme(
-        primary = primary,
-        onPrimary = onPrimary,
-        primaryContainer = primaryContainer,
-        onPrimaryContainer = onPrimaryContainer,
-        secondary = secondary,
-        onSecondary = onSecondary,
-        secondaryContainer = secondaryContainer,
-        onSecondaryContainer = onSecondaryContainer,
-        background = background,
-        onBackground = onBackground,
-        surface = surface,
-        onSurface = onSurface,
-        surfaceVariant = surfaceVariant,
-        onSurfaceVariant = onSurfaceVariant,
-        error = error,
-        onError = onError,
-        outline = outline
-    )
-}
+): ColorScheme = darkColorScheme(
+    primary = primary,
+    onPrimary = onPrimary,
+    primaryContainer = primaryContainer,
+    onPrimaryContainer = onPrimaryContainer,
+    secondary = secondary,
+    onSecondary = onSecondary,
+    secondaryContainer = secondaryContainer,
+    onSecondaryContainer = onSecondaryContainer,
+    background = background,
+    onBackground = onBackground,
+    surface = surface,
+    onSurface = onSurface,
+    surfaceVariant = surfaceVariant,
+    onSurfaceVariant = onSurfaceVariant,
+    error = error,
+    onError = onError,
+    outline = outline
+)
 
-private fun lightColorScheme(
+private fun buildLightScheme(
     primary: Color, onPrimary: Color, primaryContainer: Color, onPrimaryContainer: Color,
     secondary: Color, onSecondary: Color, secondaryContainer: Color, onSecondaryContainer: Color,
     background: Color, onBackground: Color,
@@ -49,27 +45,25 @@ private fun lightColorScheme(
     surfaceVariant: Color, onSurfaceVariant: Color,
     error: Color, onError: Color,
     outline: Color
-): lightColorScheme {
-    return androidx.compose.material3.lightColorScheme(
-        primary = primary,
-        onPrimary = onPrimary,
-        primaryContainer = primaryContainer,
-        onPrimaryContainer = onPrimaryContainer,
-        secondary = secondary,
-        onSecondary = onSecondary,
-        secondaryContainer = secondaryContainer,
-        onSecondaryContainer = onSecondaryContainer,
-        background = background,
-        onBackground = onBackground,
-        surface = surface,
-        onSurface = onSurface,
-        surfaceVariant = surfaceVariant,
-        onSurfaceVariant = onSurfaceVariant,
-        error = error,
-        onError = onError,
-        outline = outline
-    )
-}
+): ColorScheme = lightColorScheme(
+    primary = primary,
+    onPrimary = onPrimary,
+    primaryContainer = primaryContainer,
+    onPrimaryContainer = onPrimaryContainer,
+    secondary = secondary,
+    onSecondary = onSecondary,
+    secondaryContainer = secondaryContainer,
+    onSecondaryContainer = onSecondaryContainer,
+    background = background,
+    onBackground = onBackground,
+    surface = surface,
+    onSurface = onSurface,
+    surfaceVariant = surfaceVariant,
+    onSurfaceVariant = onSurfaceVariant,
+    error = error,
+    onError = onError,
+    outline = outline
+)
 
 @Composable
 fun McServerTheme(
@@ -77,62 +71,38 @@ fun McServerTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = when (themeMode) {
-        ThemeMode.LIGHT -> lightColorScheme(
-            primary = LightColors.Primary,
-            onPrimary = LightColors.OnPrimary,
-            primaryContainer = LightColors.PrimaryContainer,
-            onPrimaryContainer = LightColors.OnPrimaryContainer,
-            secondary = LightColors.Secondary,
-            onSecondary = LightColors.OnSecondary,
-            secondaryContainer = LightColors.SecondaryContainer,
-            onSecondaryContainer = LightColors.OnSecondaryContainer,
-            background = LightColors.Background,
-            onBackground = LightColors.OnBackground,
-            surface = LightColors.Surface,
-            onSurface = LightColors.OnSurface,
-            surfaceVariant = LightColors.SurfaceVariant,
-            onSurfaceVariant = LightColors.OnSurfaceVariant,
-            error = LightColors.Error,
-            onError = LightColors.OnError,
-            outline = LightColors.Outline
+        ThemeMode.LIGHT -> buildLightScheme(
+            LightColors.Primary, LightColors.OnPrimary,
+            LightColors.PrimaryContainer, LightColors.OnPrimaryContainer,
+            LightColors.Secondary, LightColors.OnSecondary,
+            LightColors.SecondaryContainer, LightColors.OnSecondaryContainer,
+            LightColors.Background, LightColors.OnBackground,
+            LightColors.Surface, LightColors.OnSurface,
+            LightColors.SurfaceVariant, LightColors.OnSurfaceVariant,
+            LightColors.Error, LightColors.OnError,
+            LightColors.Outline
         )
-        ThemeMode.DARK -> darkColorScheme(
-            primary = DarkColors.Primary,
-            onPrimary = DarkColors.OnPrimary,
-            primaryContainer = DarkColors.PrimaryContainer,
-            onPrimaryContainer = DarkColors.OnPrimaryContainer,
-            secondary = DarkColors.Secondary,
-            onSecondary = DarkColors.OnSecondary,
-            secondaryContainer = DarkColors.SecondaryContainer,
-            onSecondaryContainer = DarkColors.OnSecondaryContainer,
-            background = DarkColors.Background,
-            onBackground = DarkColors.OnBackground,
-            surface = DarkColors.Surface,
-            onSurface = DarkColors.OnSurface,
-            surfaceVariant = DarkColors.SurfaceVariant,
-            onSurfaceVariant = DarkColors.OnSurfaceVariant,
-            error = DarkColors.Error,
-            onError = DarkColors.OnError,
-            outline = DarkColors.Outline
+        ThemeMode.DARK -> buildDarkScheme(
+            DarkColors.Primary, DarkColors.OnPrimary,
+            DarkColors.PrimaryContainer, DarkColors.OnPrimaryContainer,
+            DarkColors.Secondary, DarkColors.OnSecondary,
+            DarkColors.SecondaryContainer, DarkColors.OnSecondaryContainer,
+            DarkColors.Background, DarkColors.OnBackground,
+            DarkColors.Surface, DarkColors.OnSurface,
+            DarkColors.SurfaceVariant, DarkColors.OnSurfaceVariant,
+            DarkColors.Error, DarkColors.OnError,
+            DarkColors.Outline
         )
-        ThemeMode.AMOLED -> darkColorScheme(
-            primary = AmoledColors.Primary,
-            onPrimary = AmoledColors.OnPrimary,
-            primaryContainer = AmoledColors.PrimaryContainer,
-            onPrimaryContainer = AmoledColors.OnPrimaryContainer,
-            secondary = AmoledColors.Secondary,
-            onSecondary = AmoledColors.OnSecondary,
-            secondaryContainer = AmoledColors.SecondaryContainer,
-            onSecondaryContainer = AmoledColors.OnSecondaryContainer,
-            background = AmoledColors.Background,
-            onBackground = AmoledColors.OnBackground,
-            surface = AmoledColors.Surface,
-            onSurface = AmoledColors.OnSurface,
-            surfaceVariant = AmoledColors.SurfaceVariant,
-            onSurfaceVariant = AmoledColors.OnSurfaceVariant,
-            error = AmoledColors.Error,
-            onError = AmoledColors.OnError,
-            outline = AmoledColors.Outline
+        ThemeMode.AMOLED -> buildDarkScheme(
+            AmoledColors.Primary, AmoledColors.OnPrimary,
+            AmoledColors.PrimaryContainer, AmoledColors.OnPrimaryContainer,
+            AmoledColors.Secondary, AmoledColors.OnSecondary,
+            AmoledColors.SecondaryContainer, AmoledColors.OnSecondaryContainer,
+            AmoledColors.Background, AmoledColors.OnBackground,
+            AmoledColors.Surface, AmoledColors.OnSurface,
+            AmoledColors.SurfaceVariant, AmoledColors.OnSurfaceVariant,
+            AmoledColors.Error, AmoledColors.OnError,
+            AmoledColors.Outline
         )
     }
 
