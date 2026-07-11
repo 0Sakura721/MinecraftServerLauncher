@@ -1,6 +1,8 @@
 package com.mcserver.launcher.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -74,7 +76,7 @@ fun ServerStatusCard(
                         )
                     ) {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Filled.PlayArrow,
+                            imageVector = Icons.Filled.PlayArrow,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
@@ -90,7 +92,7 @@ fun ServerStatusCard(
                         )
                     ) {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Filled.Stop,
+                            imageVector = Icons.Filled.Stop,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
