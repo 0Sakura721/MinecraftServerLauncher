@@ -103,23 +103,27 @@ fun HomeScreen(
                                 },
                                 enabled = !showJreProgress && jreInfo.status != JreStatus.DOWNLOADING
                             ) {
+                                Icon(Icons.Filled.Download, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
                                 Text("安装")
                             }
                         }
                         JreStatus.DOWNLOADING -> {
                             IconButton(onClick = { serverManager.pauseDownload() }) {
-                                Icon(Icons.Filled.Pause, "暂停", tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Filled.PauseCircle, "暂停", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                             }
                         }
                         JreStatus.PAUSED -> {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                IconButton(onClick = {
+                                FilledTonalButton(onClick = {
                                     scope.launch {
                                         serverManager.resumeDownload()
                                         serverManager.installJre()
                                     }
-                                }) {
-                                    Icon(Icons.Filled.PlayArrow, "继续", tint = MaterialTheme.colorScheme.primary)
+                                }, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+                                    Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("继续")
                                 }
                                 IconButton(onClick = { serverManager.cancelDownload() }) {
                                     Icon(Icons.Filled.Close, "取消", tint = MaterialTheme.colorScheme.error)
@@ -140,9 +144,10 @@ fun HomeScreen(
                 if (jreInfo.status == JreStatus.DOWNLOADING || jreInfo.status == JreStatus.PAUSED) {
                     LinearProgressIndicator(
                         progress = { jreInfo.downloadProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        color = if (jreInfo.status == JreStatus.PAUSED)
+                            MaterialTheme.colorScheme.tertiary
+                        else MaterialTheme.colorScheme.primary
                     )
                     if (jreInfo.totalBytes > 0) {
                         Row(

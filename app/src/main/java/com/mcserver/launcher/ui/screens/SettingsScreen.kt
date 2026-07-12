@@ -99,19 +99,8 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.height(12.dp))
 
-                // 状态
-                Text(
-                    text = when (jreInfo.status) {
-                        JreStatus.INSTALLED -> "✅ Java $selectedVersion 已就绪"
-                        JreStatus.NOT_INSTALLED -> "⚠️ 未安装"
-                        JreStatus.DOWNLOADING -> "⬇️ 下载中 ${(jreInfo.downloadProgress * 100).toInt()}%"
-                        JreStatus.PAUSED -> "⏸️ 已暂停"
-                        JreStatus.EXTRACTING -> "📦 解压中..."
-                        JreStatus.ERROR -> "❌ 安装失败"
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
+                // 状态（图标 + 文字）
+                JreStatusRow(jreInfo.status, jreInfo.downloadProgress, selectedVersion)
                 if (jreInfo.status == JreStatus.INSTALLED && jreInfo.installedVersions.size > 1) {
                     Text(
                         "已安装: ${jreInfo.installedVersions.joinToString(", ")}",
@@ -137,11 +126,17 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        Text(
-                            if (jreInfo.status == JreStatus.PAUSED) "⏸ ${(jreInfo.downloadProgress * 100).toInt()}%" else "${(jreInfo.downloadProgress * 100).toInt()}%",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (jreInfo.status == JreStatus.PAUSED) {
+                                Icon(Icons.Filled.PauseCircle, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.tertiary)
+                                Spacer(Modifier.width(2.dp))
+                            }
+                            Text(
+                                "${(jreInfo.downloadProgress * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                         Text(
                             formatBytes(jreInfo.totalBytes),
                             style = MaterialTheme.typography.bodySmall,
@@ -177,7 +172,7 @@ fun SettingsScreen(
                                                 Text("Java $v")
                                                 if (jreInfo.installedVersions.contains(v)) {
                                                     Spacer(Modifier.width(6.dp))
-                                                    Text("✓", color = MaterialTheme.colorScheme.primary)
+                                                    Icon(Icons.Filled.Done, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                                                 }
                                             }
                                         },
@@ -226,7 +221,7 @@ fun SettingsScreen(
                     }
                     if (customUrl.isNotBlank()) {
                         Spacer(Modifier.width(4.dp))
-                        Text("✓", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                        Icon(Icons.Filled.Check, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
 
@@ -264,8 +259,12 @@ fun SettingsScreen(
 
                 if (loadError) {
                     Spacer(Modifier.height(4.dp))
-                    Text("⚠ 无法连接网络，使用内置版本列表", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.CloudOff, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(4.dp))
+                        Text("无法连接网络，使用内置版本列表", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error)
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -278,12 +277,13 @@ fun SettingsScreen(
                                 onClick = { serverManager.pauseDownload() },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.tertiary
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                             ) {
-                                Icon(Icons.Filled.Pause, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("暂停")
+                                Icon(Icons.Filled.PauseCircle, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("暂停下载")
                             }
                         }
                     }
@@ -299,7 +299,7 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Icon(Icons.Filled.PlayArrow, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(4.dp))
+                                Spacer(Modifier.width(6.dp))
                                 Text("继续下载")
                             }
                             OutlinedButton(
@@ -309,6 +309,8 @@ fun SettingsScreen(
                                     contentColor = MaterialTheme.colorScheme.error
                                 )
                             ) {
+                                Icon(Icons.Filled.Close, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
                                 Text("取消")
                             }
                         }
@@ -327,6 +329,8 @@ fun SettingsScreen(
                             enabled = !showJreProgress,
                             modifier = Modifier.fillMaxWidth()
                         ) {
+                            Icon(Icons.Filled.Download, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
                             Text(if (showJreProgress) "安装中..." else if (needInstall) "安装 Java $selectedVersion (${selectedPackage.uppercase()})" else "重新安装")
                         }
                     }
@@ -352,6 +356,45 @@ fun SettingsScreen(
                 AboutRow("目标架构", "ARM64 (v7a / v8a)")
                 AboutRow("平台", "Android 8.0+ (API 26+)")
                 AboutRow("Java 运行时", "Eclipse Temurin (Adoptium)")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun JreStatusRow(status: JreStatus, progress: Float, version: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        when (status) {
+            JreStatus.INSTALLED -> {
+                Icon(Icons.Filled.CheckCircle, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("Java $version 已就绪", fontWeight = FontWeight.Medium)
+            }
+            JreStatus.NOT_INSTALLED -> {
+                Icon(Icons.Filled.ErrorOutline, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(8.dp))
+                Text("未安装", fontWeight = FontWeight.Medium)
+            }
+            JreStatus.DOWNLOADING -> {
+                Icon(Icons.Filled.Downloading, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.tertiary)
+                Spacer(Modifier.width(8.dp))
+                Text("下载中 ${(progress * 100).toInt()}%", fontWeight = FontWeight.Medium)
+            }
+            JreStatus.PAUSED -> {
+                Icon(Icons.Filled.PauseCircle, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.tertiary)
+                Spacer(Modifier.width(8.dp))
+                Text("已暂停", fontWeight = FontWeight.Medium)
+            }
+            JreStatus.EXTRACTING -> {
+                Icon(Icons.Filled.Archive, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.tertiary)
+                Spacer(Modifier.width(8.dp))
+                Text("解压中...", fontWeight = FontWeight.Medium)
+            }
+            JreStatus.ERROR -> {
+                Icon(Icons.Filled.Cancel, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.width(8.dp))
+                Text("安装失败", fontWeight = FontWeight.Medium)
             }
         }
     }
