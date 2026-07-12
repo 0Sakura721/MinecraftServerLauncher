@@ -1,5 +1,6 @@
 package com.mcserver.launcher.ui.screens
 
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -55,23 +56,7 @@ fun ServerConfigScreen(
     ) { uri: Uri? ->
         uri?.let { selectedUri ->
             scope.launch {
-                val localPath = withContext(Dispatchers.IO) {
-                    // 从 content:// URI 复制 JAR 到内部存储
-                    var name = "server.jar"
-                    context.contentResolver.query(selectedUri, null, null, null, null)?.use { cursor ->
-                        if (cursor.moveToFirst()) {
-                            val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                            if (idx >= 0) name = cursor.getString(idx)
-                        }
-                    }
-                    val target = java.io.File(context.filesDir, "servers/$name")
-                    target.parentFile?.mkdirs()
-                    context.contentResolver.openInputStream(selectedUri)?.use { input ->
-                        java.io.FileOutputStream(target).use { output -> input.copyTo(output) }
-                    }
-                    target.absolutePath
-                }
-                jarPath = localPath
+                jarPath = copyContentUriToLocal(context, selectedUri)
             }
         }
     }
@@ -171,13 +156,18 @@ fun ServerConfigScreen(
 
         Button(
             onClick = {
-                onConfigSave(config.copy(
-                    name = name, jarPath = jarPath,
-                    allocatedMemoryMB = allocatedMemory,
-                    serverPort = port.toIntOrNull() ?: 25565,
-                    additionalArgs = extraArgs,
-                    autoRestart = autoRestart, nogui = nogui
-                ))
+                scope.launch {
+                    val finalJarPath = if (jarPath.startsWith("content://")) {
+                        copyContentUriToLocal(context, Uri.parse(jarPath))
+                    } else jarPath
+                    onConfigSave(config.copy(
+                        name = name, jarPath = finalJarPath,
+                        allocatedMemoryMB = allocatedMemory,
+                        serverPort = port.toIntOrNull() ?: 25565,
+                        additionalArgs = extraArgs,
+                        autoRestart = autoRestart, nogui = nogui
+                    ))
+                }
             },
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(16.dp)
@@ -304,4 +294,20 @@ private fun DeviceMemoryBar(memoryInfo: MemoryInfo, allocatedMemory: Int) {
             )
         }
     }
+}
+
+private suspend fun copyContentUriToLocal(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
+    var name = "server.jar"
+    context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (idx >= 0) name = cursor.getString(idx)
+        }
+    }
+    val target = java.io.File(context.filesDir, "servers/$name")
+    target.parentFile?.mkdirs()
+    context.contentResolver.openInputStream(uri)?.use { input ->
+        java.io.FileOutputStream(target).use { output -> input.copyTo(output) }
+    } ?: throw IllegalStateException("无法读取 JAR 文件")
+    target.absolutePath
 }

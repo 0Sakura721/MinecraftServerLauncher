@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.*
+import android.provider.OpenableColumns
 import android.util.Log
 import com.mcserver.launcher.McApplication
 import com.mcserver.launcher.data.ServerConfig
@@ -93,6 +94,27 @@ class TermuxManager {
 
     // ─── 启动服务器 ───
 
+    private suspend fun ensureLocalJarPath(jarPath: String): String {
+        if (!jarPath.startsWith("content://")) return jarPath
+        // content:// URI → 复制到内部存储
+        return withContext(Dispatchers.IO) {
+            val uri = Uri.parse(jarPath)
+            var name = "server.jar"
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) name = cursor.getString(idx)
+                }
+            }
+            val target = File(context.filesDir, "servers/$name")
+            target.parentFile?.mkdirs()
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(target).use { output -> input.copyTo(output) }
+            } ?: throw IllegalStateException("无法读取 JAR 文件")
+            target.absolutePath
+        }
+    }
+
     suspend fun startServer(config: ServerConfig, javaPath: String? = null): Result<Unit> =
         withContext(Dispatchers.IO) {
             try {
@@ -104,10 +126,12 @@ class TermuxManager {
 
                 emit("> 🔧 准备 Termux 环境...")
 
-                // 1. 复制 JAR 到共享目录
+                // 1. 复制 JAR 到共享目录（处理 content:// URI）
                 val serverDir = File("${Environment.getExternalStorageDirectory()}/mcserver")
                 if (!serverDir.exists()) serverDir.mkdirs()
-                val jarFile = File(config.jarPath)
+
+                val localJarPath = ensureLocalJarPath(config.jarPath)
+                val jarFile = File(localJarPath)
                 val targetJar = File(serverDir, jarFile.name)
 
                 if (!targetJar.exists() || jarFile.lastModified() > targetJar.lastModified()) {
