@@ -55,8 +55,19 @@ fun ServerConfigScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let { selectedUri ->
+            // 持有持久��取权限
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    selectedUri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
             scope.launch {
-                jarPath = copyContentUriToLocal(context, selectedUri)
+                try {
+                    jarPath = copyContentUriToLocal(context, selectedUri)
+                } catch (e: Exception) {
+                    // 复制失败，仍存 URI 作为兜底
+                    jarPath = selectedUri.toString()
+                }
             }
         }
     }

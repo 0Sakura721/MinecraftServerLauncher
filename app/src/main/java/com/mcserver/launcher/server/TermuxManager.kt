@@ -99,19 +99,31 @@ class TermuxManager {
         // content:// URI → 复制到内部存储
         return withContext(Dispatchers.IO) {
             val uri = Uri.parse(jarPath)
+            // 尝试持有持久权限
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
             var name = "server.jar"
-            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (idx >= 0) name = cursor.getString(idx)
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (idx >= 0) name = cursor.getString(idx)
+                    }
                 }
+                val target = File(context.filesDir, "servers/$name")
+                target.parentFile?.mkdirs()
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(target).use { output -> input.copyTo(output) }
+                } ?: throw SecurityException("无法读取")
+                target.absolutePath
+            } catch (e: SecurityException) {
+                throw SecurityException(
+                    "JAR 文件权限已过期，请到「配置」页面重新选择一次 JAR 文件"
+                )
             }
-            val target = File(context.filesDir, "servers/$name")
-            target.parentFile?.mkdirs()
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(target).use { output -> input.copyTo(output) }
-            } ?: throw IllegalStateException("无法读取 JAR 文件")
-            target.absolutePath
         }
     }
 
@@ -130,7 +142,14 @@ class TermuxManager {
                 val serverDir = File("${Environment.getExternalStorageDirectory()}/mcserver")
                 if (!serverDir.exists()) serverDir.mkdirs()
 
-                val localJarPath = ensureLocalJarPath(config.jarPath)
+                val localJarPath: String
+                try {
+                    localJarPath = ensureLocalJarPath(config.jarPath)
+                } catch (e: SecurityException) {
+                    emit("> ❌ ${e.message}")
+                    emit("> 提示：选完 JAR 文件后记得点击「保存配置」")
+                    return@withContext Result.failure(e)
+                }
                 val jarFile = File(localJarPath)
                 val targetJar = File(serverDir, jarFile.name)
 
