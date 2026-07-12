@@ -151,7 +151,7 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     InfoRow("名称", config.name)
                     InfoRow("JAR", config.jarPath.substringAfterLast("/"))
-                    InfoRow("内存", "${config.maxRamMB} MB / ${config.minRamMB} MB")
+                    InfoRow("内存", "${config.allocatedMemoryMB} MB")
                     InfoRow("端口", "${config.serverPort}")
                 }
             }

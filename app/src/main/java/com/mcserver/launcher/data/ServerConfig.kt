@@ -4,13 +4,16 @@ data class ServerConfig(
     val name: String = "Minecraft Server",
     val jarPath: String = "",
     val javaPath: String = "",
-    val maxRamMB: Int = 2048,
-    val minRamMB: Int = 1024,
+    val allocatedMemoryMB: Int = 2048,  // 用户通过滑块控制的统一内存分配
     val serverPort: Int = 25565,
     val additionalArgs: String = "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200",
     val autoRestart: Boolean = false,
     val nogui: Boolean = true
 ) {
+    // 运行时：最大堆 = 用户分配值，最小堆 = 其一半（不低于 256MB）
+    val maxRamMB: Int get() = allocatedMemoryMB
+    val minRamMB: Int get() = (allocatedMemoryMB / 2).coerceAtLeast(256)
+
     fun toCommandArgs(): List<String> {
         return buildList {
             add("-Xmx${maxRamMB}M")
