@@ -45,6 +45,7 @@ class ServerManager private constructor() {
     fun resumeDownload() = jreManager.resumeDownload()
     fun cancelDownload() = jreManager.cancelDownload()
     fun deleteInstalledVersion(version: String) = jreManager.deleteInstalledVersion(version)
+    suspend fun testMirrorLatency() = testAllMirrors()
 
     fun startServer(config: ServerConfig) {
         if (jarRunner.running) return

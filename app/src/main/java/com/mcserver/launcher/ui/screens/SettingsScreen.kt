@@ -11,8 +11,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.mcserver.launcher.data.JreStatus
 import com.mcserver.launcher.server.JreManager
+import com.mcserver.launcher.server.MirrorLatency
 import com.mcserver.launcher.server.ServerManager
 import com.mcserver.launcher.ui.components.ThemeSelectorCard
 import com.mcserver.launcher.ui.theme.ThemeMode
@@ -40,6 +42,10 @@ fun SettingsScreen(
 
     var customUrl by remember { mutableStateOf(serverManager.customBaseUrl) }
     var showCustomUrl by remember { mutableStateOf(false) }
+
+    // 延迟测试
+    var mirrorLatencyTest by remember { mutableStateOf<List<MirrorLatency>>(emptyList()) }
+    var testingLatency by remember { mutableStateOf(false) }
 
     // 删除确认弹窗
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
@@ -162,14 +168,58 @@ fun SettingsScreen(
 
                 // 镜像源选择
                 Spacer(Modifier.height(8.dp))
-                Text("下载源", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("下载源", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (testingLatency) {
+                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(4.dp))
+                            Text("测速中...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                        }
+                        TextButton(onClick = {
+                            scope.launch {
+                                testingLatency = true
+                                val results = serverManager.testMirrorLatency()
+                                mirrorLatencyTest = results
+                                // 自动选择延迟最低的
+                                val best = results.firstOrNull()
+                                if (best != null) {
+                                    selectedMirror = best.key
+                                    serverManager.setMirror(best.key)
+                                }
+                                testingLatency = false
+                            }
+                        }) {
+                            Icon(if (mirrorLatencyTest.isEmpty()) Icons.Filled.NetworkCheck else Icons.Filled.Refresh, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(2.dp))
+                            Text("测速", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     JreManager.MIRROR_OPTIONS.take(4).forEach { (key, label) ->
+                        val latency = mirrorLatencyTest.firstOrNull { it.key == key }
                         FilterChip(
                             selected = selectedMirror == key,
                             onClick = { selectedMirror = key; serverManager.setMirror(key) },
-                            label = { Text(label.split("（")[0].split("(")[0], style = MaterialTheme.typography.labelSmall, maxLines = 1) }
+                            label = {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(label.split("（")[0].split("(")[0], style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                    if (latency != null) {
+                                        val color = when {
+                                            latency.isBest -> MaterialTheme.colorScheme.primary
+                                            latency.latencyMs == Long.MAX_VALUE -> MaterialTheme.colorScheme.error
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                        Text(
+                                            if (latency.latencyMs == Long.MAX_VALUE) "超时" else "${latency.latencyMs}ms",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            color = color
+                                        )
+                                    }
+                                }
+                            }
                         )
                     }
                 }

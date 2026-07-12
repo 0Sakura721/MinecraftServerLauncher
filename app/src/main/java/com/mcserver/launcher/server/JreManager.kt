@@ -52,10 +52,10 @@ class JreManager(private val context: Context) {
     }
 
     companion object {
-        private const val ADOPTIUM_API = "https://api.adoptium.net/v3"
-        private const val ALIYUN_MIRROR = "https://mirrors.aliyun.com/adoptium"
-        private const val TSINGHUA_MIRROR = "https://mirrors.tuna.tsinghua.edu.cn/Adoptium"
-        private const val USTC_MIRROR = "https://mirrors.ustc.edu.cn/adoptium"
+        internal const val ADOPTIUM_API = "https://api.adoptium.net/v3"
+        internal const val ALIYUN_MIRROR = "https://mirrors.aliyun.com/adoptium"
+        internal const val TSINGHUA_MIRROR = "https://mirrors.tuna.tsinghua.edu.cn/Adoptium"
+        internal const val USTC_MIRROR = "https://mirrors.ustc.edu.cn/adoptium"
 
         fun getDeviceArch(): String {
             if (Build.SUPPORTED_64_BIT_ABIS.isNotEmpty() &&
@@ -301,6 +301,40 @@ class JreManager(private val context: Context) {
         ProcessBuilder().command("tar", "xzf", tarGzFile.absolutePath, "-C", destDir.absolutePath, "--strip-components=1")
             .redirectErrorStream(true).start().waitFor().let { if (it != 0) throw RuntimeException("解压失败: $it") }
     }
+}
+
+data class MirrorLatency(val key: String, val name: String, val latencyMs: Long, val isBest: Boolean)
+
+/** 测试所有镜像延迟，返回按延迟排序的列表 */
+suspend fun testAllMirrors(): List<MirrorLatency> = withContext(Dispatchers.IO) {
+    JreManager.MIRROR_OPTIONS.map { (key, name) ->
+        val ms = testUrlLatency(
+            when (key) {
+                "" -> "${JreManager.ADOPTIUM_API}/info/available_releases"
+                "aliyun" -> "${JreManager.ALIYUN_MIRROR}/info/available_releases"
+                "tsinghua" -> "${JreManager.TSINGHUA_MIRROR}/info/available_releases"
+                "ustc" -> "${JreManager.USTC_MIRROR}/info/available_releases"
+                else -> "${JreManager.ADOPTIUM_API}/info/available_releases"
+            }
+        )
+        MirrorLatency(key, name, ms, false)
+    }.sortedBy { it.latencyMs }.let { sorted ->
+        val best = sorted.firstOrNull()?.latencyMs ?: Long.MAX_VALUE
+        sorted.map { it.copy(isBest = it.latencyMs == best) }
+    }
+}
+
+private fun testUrlLatency(url: String): Long {
+    return try {
+        val start = System.currentTimeMillis()
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 5000; conn.readTimeout = 5000
+        conn.requestMethod = "HEAD"
+        conn.connect()
+        conn.responseCode
+        conn.disconnect()
+        System.currentTimeMillis() - start
+    } catch (e: Exception) { Long.MAX_VALUE }
 }
 
 // ─── 后台下载前台服务 ───
