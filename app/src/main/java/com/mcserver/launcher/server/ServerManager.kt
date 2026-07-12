@@ -75,12 +75,15 @@ class ServerManager private constructor() {
             try {
                 _serverStatus.value = _serverStatus.value.copy(state = ServerState.RUNNING)
                 startUptime()
-                termuxManager.startServer(config)
+                val result = termuxManager.startServer(config)
                 stopUptime()
-                _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
+                _serverStatus.value = ServerStatus(
+                    state = if (result.isSuccess) ServerState.STOPPED else ServerState.ERROR
+                )
                 try { context.stopService(Intent(context, ServerForegroundService::class.java)) } catch (_: Exception) {}
             } catch (e: CancellationException) {
                 stopUptime()
+                _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
             } catch (e: Exception) {
                 stopUptime()
                 _serverStatus.value = ServerStatus(state = ServerState.ERROR)
@@ -91,7 +94,11 @@ class ServerManager private constructor() {
 
     fun stopServer() {
         _serverStatus.value = _serverStatus.value.copy(state = ServerState.STOPPING)
-        termuxManager.stopServer()
+        serverScope.launch {
+            termuxManager.stopServer()
+            _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
+            try { context.stopService(Intent(context, ServerForegroundService::class.java)) } catch (_: Exception) {}
+        }
     }
 
     fun sendCommand(cmd: String) {
