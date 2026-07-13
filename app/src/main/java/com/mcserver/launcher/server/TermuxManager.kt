@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import java.io.*
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -35,6 +36,13 @@ class TermuxManager {
         const val TERMUX_USR = "$TERMUX_FILES/usr"
         const val TERMUX_BIN = "$TERMUX_USR/bin"
 
+        /** 共享工作目录（应用与 Termux 都能访问） */
+        fun serverDir(ctx: Context): File {
+            val dir = File(Environment.getExternalStorageDirectory(), "mcserver")
+            if (!dir.exists()) dir.mkdirs()
+            return dir
+        }
+
         /** 检查 Termux 是否已安装 */
         fun isTermuxInstalled(ctx: Context): Boolean {
             return try {
@@ -49,13 +57,15 @@ class TermuxManager {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(intent)
         }
-
     }
 
     private val context: Context get() = McApplication.instance
     private val isRunning = AtomicBoolean(false)
     private var tailJob: Job? = null
     private var logFile: File? = null
+
+    /** 服务器进程退出时回调（用于崩溃检测 / 自动重启） */
+    var onServerExited: (() -> Unit)? = null
 
     private val _consoleOutput = MutableSharedFlow<String>(
         replay = 500, extraBufferCapacity = 100,
@@ -131,22 +141,21 @@ class TermuxManager {
         withContext(Dispatchers.IO) {
             try {
                 if (!isTermuxInstalled(context)) {
-                    emit("> ❌ 需要安装 Termux 来提供 Linux 运行环境")
+                    emit("> 需要安装 Termux 来提供 Linux 运行环境")
                     emit("> 请在 F-Droid 下载 Termux: https://f-droid.org/packages/com.termux/")
                     return@withContext Result.failure(Exception("Termux 未安装"))
                 }
 
-                emit("> 🔧 准备 Termux 环境...")
+                emit("> 准备 Termux 环境...")
 
                 // 1. 复制 JAR 到共享目录（处理 content:// URI）
-                val serverDir = File("${Environment.getExternalStorageDirectory()}/mcserver")
-                if (!serverDir.exists()) serverDir.mkdirs()
+                val serverDir = serverDir(context)
 
                 val localJarPath: String
                 try {
                     localJarPath = ensureLocalJarPath(config.jarPath)
                 } catch (e: SecurityException) {
-                    emit("> ❌ ${e.message}")
+                    emit("> ${e.message}")
                     emit("> 提示：选完 JAR 文件后记得点击「保存配置」")
                     return@withContext Result.failure(e)
                 }
@@ -158,19 +167,31 @@ class TermuxManager {
                     jarFile.copyTo(targetJar, overwrite = true)
                 }
 
-                // 2. 创建启动脚本
+                // 2. 创建启动脚本（使用命名管道接收控制台命令）
                 val scriptFile = File(serverDir, "start.sh")
                 val logPath = File(serverDir, "server.log").absolutePath
+                val pipePath = File(serverDir, "cmdpipe").absolutePath
 
                 val termuxJava = "$TERMUX_BIN/java"
                 val xmx = config.maxRamMB
                 val xms = config.minRamMB
+                val noguiArg = if (config.nogui) "nogui" else ""
+                val args = config.additionalArgs.trim()
+
                 val script = buildString {
                     appendLine("#!/data/data/com.termux/files/usr/bin/bash")
                     appendLine("cd ${serverDir.absolutePath}")
-                    appendLine("echo '--- Minecraft Server Started ---' > $logPath")
-                    appendLine("$termuxJava -Xmx${xmx}M -Xms${xms}M ${config.additionalArgs} -jar ${targetJar.name} nogui >> $logPath 2>&1")
-                    appendLine("echo '--- Server Stopped ---' >> $logPath")
+                    // 清理可能残留的监听进程与管道
+                    appendLine("pkill -f 'cmdpipe' 2>/dev/null || true")
+                    appendLine("rm -f '$pipePath'")
+                    appendLine("mkfifo '$pipePath'")
+                    appendLine("echo '--- Minecraft Server Started ---' > '$logPath'")
+                    // 通过命名管道把控制台命令喂给 java 的 stdin
+                    appendLine("tail -f '$pipePath' | $termuxJava -Xmx${xmx}M -Xms${xms}M $args -jar '${targetJar.name}' $noguiArg >> '$logPath' 2>&1 &")
+                    appendLine("JAVA_PID=\$!")
+                    // 阻塞直到 java 退出，再写入结束标记（用于崩溃/停止检测）
+                    appendLine("wait \$JAVA_PID")
+                    appendLine("echo '--- Server Stopped ---' >> '$logPath'")
                 }
                 scriptFile.writeText(script)
                 scriptFile.setExecutable(true)
@@ -178,6 +199,7 @@ class TermuxManager {
                 emit("> 启动脚本: ${scriptFile.absolutePath}")
                 emit("> JAR: ${targetJar.name}")
                 emit("> 内存: ${xmx}MB / ${xms}MB")
+                if (noguiArg.isNotEmpty()) emit("> 模式: 无 GUI (nogui)") else emit("> 模式: 带 GUI")
 
                 // 3. 清空日志
                 logFile = File(logPath)
@@ -195,7 +217,7 @@ class TermuxManager {
                     context.startForegroundService(intent)
                 else context.startService(intent)
 
-                emit("> ✅ 服务器已在 Termux 中启动")
+                emit("> 服务器已在 Termux 中启动")
 
                 // 5. 追踪日志文件输出
                 isRunning.set(true)
@@ -205,39 +227,99 @@ class TermuxManager {
                 Result.success(Unit)
             } catch (e: Exception) {
                 Log.e(TAG, "启动失败", e)
-                emit("> ❌ 错误: ${e.message}")
+                emit("> 错误: ${e.message}")
                 _stateChanged.tryEmit(false)
                 isRunning.set(false)
                 Result.failure(e)
             }
         }
 
-    // ─── 日志追踪 ───
+    // ─── 日志追踪（UTF-8 安全） ───
 
     private fun startTailLog(file: File) {
         tailJob?.cancel()
         tailJob = CoroutineScope(Dispatchers.IO).launch {
             var lastSize = 0L
+            var leftover = byteArrayOf()
             while (isActive && isRunning.get()) {
                 try {
                     val currentSize = file.length()
                     if (currentSize > lastSize) {
+                        val newBytes = ByteArray((currentSize - lastSize).toInt())
                         RandomAccessFile(file, "r").use { raf ->
                             raf.seek(lastSize)
-                            var line: String?
-                            while (raf.readLine().also { line = it } != null) {
-                                if (!line.isNullOrBlank())
-                                    _consoleOutput.tryEmit(line!!)
-                            }
+                            raf.readFully(newBytes)
                         }
                         lastSize = currentSize
+
+                        // 拼接上次残留的不完整字节，保证 UTF-8 多字节字符不被截断
+                        val combined = ByteArray(leftover.size + newBytes.size).apply {
+                            System.arraycopy(leftover, 0, this, 0, leftover.size)
+                            System.arraycopy(newBytes, 0, this, leftover.size, newBytes.size)
+                        }
+                        val text = String(combined, StandardCharsets.UTF_8)
+                        val parts = text.split("\n")
+                        val endsWithNewline = combined.isEmpty() || combined.last() == '\n'.code.toByte()
+                        val complete = if (endsWithNewline) parts else parts.dropLast(1)
+                        for (line in complete) {
+                            if (line == "--- Server Stopped ---") {
+                                // 服务器进程已退出
+                                handleServerExit()
+                                return@launch
+                            }
+                            if (line.isNotBlank()) _consoleOutput.tryEmit(line)
+                        }
+                        leftover = if (endsWithNewline) byteArrayOf()
+                        else parts.last().toByteArray(StandardCharsets.UTF_8)
                     } else if (currentSize < lastSize) {
-                        // 文件被重置
+                        // 日志被重置
                         lastSize = 0
+                        leftover = byteArrayOf()
                     }
                 } catch (_: Exception) {}
                 delay(300)
             }
+        }
+    }
+
+    /** 服务器进程退出：重置状态并通知上层（用于自动重启 / 崩溃检测） */
+    private fun handleServerExit() {
+        if (!isRunning.compareAndSet(true, false)) return
+        _stateChanged.tryEmit(false)
+        emit("> 服务器进程已退出")
+        tailJob?.cancel()
+        try { onServerExited?.invoke() } catch (_: Exception) {}
+    }
+
+    // ─── 发送控制台命令 ───
+
+    /**
+     * 向运行中的服务器发送命令（如 stop / op / gamemode）
+     * 通过命名管道喂给 java 的 stdin
+     */
+    fun sendCommand(cmd: String) {
+        if (!isRunning.get() || cmd.isBlank()) return
+        emit("> $cmd")
+        try {
+            val pipe = File(serverDir(context), "cmdpipe")
+            if (!pipe.exists()) {
+                emit("> 命令发送失败：服务器未就绪")
+                return
+            }
+            // 经由 Termux 写入管道（命令作为参数传入，避免 shell 注入）
+            val intent = Intent("com.termux.RUN_COMMAND")
+            intent.setClassName(TERMUX_PACKAGE, "com.termux.app.RunCommandService")
+            intent.putExtra("com.termux.RUN_COMMAND_PATH", "$TERMUX_BIN/bash")
+            intent.putExtra(
+                "com.termux.RUN_COMMAND_ARGUMENTS",
+                arrayOf("-c", "timeout 5 printf '%s\\n' \"\$1\" >> \"\$2\"", "sh", cmd, pipe.absolutePath)
+            )
+            intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", TERMUX_HOME)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                context.startForegroundService(intent)
+            else context.startService(intent)
+        } catch (e: Exception) {
+            emit("> 命令发送失败：${e.message}")
         }
     }
 
@@ -246,11 +328,11 @@ class TermuxManager {
     fun stopServer() {
         emit("> 正在停止服务器...")
         try {
-            // 通过 Termux 发送 stop 命令
-            val stopScript = File("${Environment.getExternalStorageDirectory()}/mcserver/stop.sh")
+            val stopScript = File(serverDir(context), "stop.sh")
             stopScript.writeText(
                 "#!/data/data/com.termux/files/usr/bin/bash\n" +
-                "pkill -f 'java.*server' || true"
+                "pkill -f 'server.jar' 2>/dev/null || true\n" +
+                "pkill -f 'cmdpipe' 2>/dev/null || true\n"
             )
             stopScript.setExecutable(true)
             val intent = Intent("com.termux.RUN_COMMAND")
@@ -263,10 +345,21 @@ class TermuxManager {
             else context.startService(intent)
         } catch (_: Exception) {}
 
-        tailJob?.cancel()
-        isRunning.set(false)
-        _stateChanged.tryEmit(false)
-        emit("> 服务器已停止")
+        // 若 3 秒后仍未退出，强制收尾
+        CoroutineScope(Dispatchers.IO).launch {
+            delay(3000)
+            if (isRunning.get()) {
+                isRunning.set(false)
+                _stateChanged.tryEmit(false)
+                emit("> 服务器已停止")
+            }
+            tailJob?.cancel()
+        }
+    }
+
+    /** 供上层向控制台写入一行提示（如自动重启通知） */
+    fun notifyConsole(msg: String) {
+        emit(msg)
     }
 
     private fun emit(msg: String) {

@@ -7,6 +7,7 @@ import com.mcserver.launcher.McApplication
 import com.mcserver.launcher.data.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ServerManager private constructor() {
 
@@ -34,6 +35,9 @@ class ServerManager private constructor() {
 
     private var serverJob: Job? = null
     private var uptimeJob: Job? = null
+    private var lastConfig: ServerConfig? = null
+    /** 区分「用户手动停止」与「崩溃退出」，避免自动重启把手动停止的服务器又拉起来 */
+    private val manualStop = AtomicBoolean(false)
 
     suspend fun fetchAvailableVersions() = jreManager.fetchAvailableVersions()
 
@@ -54,8 +58,13 @@ class ServerManager private constructor() {
 
     fun startServer(config: ServerConfig) {
         if (termuxManager.running) return
+        lastConfig = config
+        manualStop.set(false)
+        launchServer(config)
+    }
 
-        // 检查 Termux
+    /** 真正执行一次启动（含自动重启时的重复调用） */
+    private fun launchServer(config: ServerConfig) {
         if (!TermuxManager.isTermuxInstalled(context)) {
             _serverStatus.value = ServerStatus(state = ServerState.ERROR)
             return
@@ -64,45 +73,64 @@ class ServerManager private constructor() {
         serverJob?.cancel()
         _serverStatus.value = ServerStatus(state = ServerState.STARTING)
 
-        // 启动前台服务
-        try {
-            val si = Intent(context, ServerForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(si)
-            else context.startService(si)
-        } catch (_: Exception) {}
+        startForeground()
+
+        // 服务器进程退出回调：崩溃检测 + 自动重启 + 手动停止收尾
+        termuxManager.onServerExited = {
+            serverScope.launch {
+                if (manualStop.get()) {
+                    _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
+                    stopUptime()
+                    stopForeground()
+                } else if (config.autoRestart) {
+                    termuxManager.notifyConsole("> 自动重启已开启，正在重新启动服务器...")
+                    launchServer(config)
+                } else {
+                    _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
+                    stopUptime()
+                    stopForeground()
+                }
+            }
+        }
 
         serverJob = serverScope.launch {
-            try {
-                _serverStatus.value = _serverStatus.value.copy(state = ServerState.RUNNING)
-                startUptime()
-                val result = termuxManager.startServer(config)
-                stopUptime()
-                _serverStatus.value = ServerStatus(
-                    state = if (result.isSuccess) ServerState.STOPPED else ServerState.ERROR
-                )
-                try { context.stopService(Intent(context, ServerForegroundService::class.java)) } catch (_: Exception) {}
-            } catch (e: CancellationException) {
-                stopUptime()
-                _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
-            } catch (e: Exception) {
+            _serverStatus.value = _serverStatus.value.copy(state = ServerState.RUNNING)
+            startUptime()
+            val result = termuxManager.startServer(config)
+            if (result.isFailure) {
                 stopUptime()
                 _serverStatus.value = ServerStatus(state = ServerState.ERROR)
-                try { context.stopService(Intent(context, ServerForegroundService::class.java)) } catch (_: Exception) {}
+                stopForeground()
+                termuxManager.onServerExited = null
             }
+            // 启动成功后，进程的实际退出由 onServerExited 回调处理
         }
     }
 
     fun stopServer() {
+        if (!termuxManager.running) {
+            _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
+            stopUptime()
+            stopForeground()
+            return
+        }
+        manualStop.set(true)
+        // 保留 onServerExited 回调，由它负责把状态收尾为「已停止」
         _serverStatus.value = _serverStatus.value.copy(state = ServerState.STOPPING)
         serverScope.launch {
             termuxManager.stopServer()
-            _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
-            try { context.stopService(Intent(context, ServerForegroundService::class.java)) } catch (_: Exception) {}
+            // 安全兜底：若 4s 内回调未触发，强制收尾
+            delay(4000)
+            if (termuxManager.running) {
+                _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
+                stopUptime()
+                stopForeground()
+            }
         }
     }
 
     fun sendCommand(cmd: String) {
-        // 通过 Termux 发送命令到服务器 stdin 较复杂，暂不支持
+        termuxManager.sendCommand(cmd)
     }
 
     suspend fun installJre(onProgress: (Float, Long, Long) -> Unit = { _, _, _ -> }) =
@@ -119,4 +147,16 @@ class ServerManager private constructor() {
     }
 
     private fun stopUptime() { uptimeJob?.cancel(); uptimeJob = null }
+
+    private fun startForeground() {
+        try {
+            val si = Intent(context, ServerForegroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(si)
+            else context.startService(si)
+        } catch (_: Exception) {}
+    }
+
+    private fun stopForeground() {
+        try { context.stopService(Intent(context, ServerForegroundService::class.java)) } catch (_: Exception) {}
+    }
 }
