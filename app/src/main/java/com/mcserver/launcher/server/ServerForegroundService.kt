@@ -55,6 +55,9 @@ class ServerForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                // 停止动作统一交给 ServerManager.stopServer()，避免与 onDestroy 重复。
+                // 仅移除通知并结束本服务，停止服务器的回调由 TermuxManager 完成。
+                isRunning = false
                 ServerManager.instance.stopServer()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -90,6 +93,7 @@ class ServerForegroundService : Service() {
         super.onDestroy()
         isRunning = false
         try { unregisterReceiver(commandReceiver) } catch (_: Exception) {}
-        ServerManager.instance.stopServer()
+        // 停止动作已在 ACTION_STOP 路径（或 UI 直接调用 ServerManager.stopServer）处理，
+        // 此处不再重复，仅清理资源，避免双重停止导致状态混乱。
     }
 }

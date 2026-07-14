@@ -193,18 +193,21 @@ class TermuxManager {
                 val noguiArg = if (config.nogui) "nogui" else ""
                 val args = config.additionalArgs.trim()
 
+                val pidFile = File(serverDir, "mcserver.pid").absolutePath
                 val script = buildString {
                     appendLine("#!/data/data/com.termux/files/usr/bin/bash")
                     appendLine("cd ${serverDir.absolutePath}")
-                    // 清理可能残留的监听进程与管道
-                    appendLine("pkill -f 'cmdpipe' 2>/dev/null || true")
+                    // 清理可能残留的监听管道
                     appendLine("rm -f '$pipePath'")
                     appendLine("mkfifo '$pipePath'")
                     appendLine("echo '--- Minecraft Server Started ---' > '$logPath'")
-                    // 通过命名管道把控制台命令喂给 java 的 stdin
+                    appendLine(": > '$pidFile'")
+                    // 通过命名管道把控制台命令喂给 java 的 stdin")
                     appendLine("tail -f '$pipePath' | $termuxJava -Xmx${xmx}M -Xms${xms}M $args -jar '${targetJar.name}' $noguiArg >> '$logPath' 2>&1 &")
                     appendLine("JAVA_PID=\$!")
-                    // 阻塞直到 java 退出，再写入结束标记（用于崩溃/停止检测）
+                    // 记录 java 进程 PID，供精确停止（不再依赖写死的 jar 名做 pkill）")
+                    appendLine("echo \$JAVA_PID > '$pidFile'")
+                    // 阻塞直到 java 退出，再写入结束标记（用于崩溃/停止检测")
                     appendLine("wait \$JAVA_PID")
                     appendLine("echo '--- Server Stopped ---' >> '$logPath'")
                 }
@@ -429,18 +432,60 @@ class TermuxManager {
 
     // ─── 停止 ───
 
+    /**
+     * 停止运行中的服务器。
+     *
+     * 停止策略（与 Pterodactyl / MCSManager 等成熟面板一致）：
+     *   1) 优先通过命名管道发送 `stop` 命令，让服务器优雅关闭并保存存档；
+     *   2) 等待一段时间后，若进程仍在，按 mcserver.pid 记录的精确 PID 发送 SIGTERM；
+     *   3) 若仍存活，再发送 SIGKILL 强制结束。
+     *
+     * 不再使用写死的 `pkill -f 'server.jar'`，因此 Paper / Spigot / Forge 等
+     * 任意名字的 JAR 都能被正确停止。
+     */
     fun stopServer() {
+        if (!isRunning.get()) {
+            emit("> 服务器未在运行")
+            return
+        }
         emit("> 正在停止服务器...")
         onlinePlayers.clear()
         _players.value = emptyList()
+
+        val dir = serverDir(context)
+        val pidFile = File(dir, "mcserver.pid")
+        val pipe = File(dir, "cmdpipe")
+
+        // 步骤 1：先尝试优雅关闭（向命名管道写入 stop 命令）
+        if (pipe.exists()) {
+            try {
+                writeCommandToPipe(context, "stop")
+            } catch (_: Exception) {}
+        }
+
+        // 步骤 2 / 3：读取精确 PID，先 TERM 后 KILL，避免误杀其它进程
+        val stopScript = File(dir, "stop.sh")
+        val pidPath = pidFile.absolutePath
+        val pipePath = pipe.absolutePath
+        stopScript.writeText(
+            "#!/data/data/com.termux/files/usr/bin/bash\n" +
+            // 5s 后若仍在运行，按 PID 精确结束
+            "sleep 5\n" +
+            "if [ -f '$pidPath' ]; then\n" +
+            "  PID=\$(cat '$pidPath' 2>/dev/null)\n" +
+            "  if [ -n \"\$PID\" ] && kill -0 \"\$PID\" 2>/dev/null; then\n" +
+            "    kill -TERM \"\$PID\" 2>/dev/null\n" +
+            // 再给 5s 优雅退出，仍存活则强杀
+            "    sleep 5\n" +
+            "    kill -0 \"\$PID\" 2>/dev/null && kill -KILL \"\$PID\" 2>/dev/null\n" +
+            "  fi\n" +
+            "fi\n" +
+            // 兜底：清理管道监听进程（tail -f cmdpipe）
+            "pkill -f '${pipePath}' 2>/dev/null || true\n" +
+            "rm -f '$pidPath'\n"
+        )
+        stopScript.setExecutable(true)
         try {
-            val stopScript = File(serverDir(context), "stop.sh")
-            stopScript.writeText(
-                "#!/data/data/com.termux/files/usr/bin/bash\n" +
-                "pkill -f 'server.jar' 2>/dev/null || true\n" +
-                "pkill -f 'cmdpipe' 2>/dev/null || true\n"
-            )
-            stopScript.setExecutable(true)
             val intent = Intent("com.termux.RUN_COMMAND")
             intent.setClassName(TERMUX_PACKAGE, "com.termux.app.RunCommandService")
             intent.putExtra("com.termux.RUN_COMMAND_PATH", "$TERMUX_BIN/bash")
@@ -451,9 +496,9 @@ class TermuxManager {
             else context.startService(intent)
         } catch (_: Exception) {}
 
-        // 若 3 秒后仍未退出，强制收尾
+        // 收尾兜底：若 12 秒后仍未收到退出标记，强制标记为已停止
         CoroutineScope(Dispatchers.IO).launch {
-            delay(3000)
+            delay(12000)
             if (isRunning.get()) {
                 isRunning.set(false)
                 _stateChanged.tryEmit(false)
