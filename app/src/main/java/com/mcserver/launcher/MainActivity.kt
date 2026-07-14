@@ -81,7 +81,7 @@ fun MainApp(
         Screen.ServerConfig.route, Screen.Plugins.route,
         Screen.Players.route, Screen.Files.route,
         Screen.Backups.route, Screen.CoreDownload.route,
-        Screen.ResourcePacks.route
+        Screen.ResourcePacks.route, Screen.Schedules.route
     )
 
     Scaffold(
@@ -189,6 +189,9 @@ fun MainApp(
             }
             composable(Screen.ResourcePacks.route) {
                 ResourcePacksScreen()
+            }
+            composable(Screen.Schedules.route) {
+                SchedulesScreen()
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(

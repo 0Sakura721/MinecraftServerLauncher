@@ -55,8 +55,13 @@ fun ServerConfigScreen(
     var spawnProtection by remember { mutableStateOf(config.spawnProtection.toString()) }
     var viewDistance by remember { mutableStateOf(config.viewDistance.toString()) }
     // 自动重启保护
+    // 自动重启保护
     var maxRestarts by remember { mutableStateOf(config.maxRestarts.toString()) }
     var restartCooldown by remember { mutableStateOf(config.restartCooldownSec.toString()) }
+    // RCON
+    var rconEnabled by remember { mutableStateOf(config.rconEnabled) }
+    var rconPort by remember { mutableStateOf(config.rconPort.toString()) }
+    var backupOnStop by remember { mutableStateOf(config.backupOnStop) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -101,6 +106,54 @@ fun ServerConfigScreen(
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
+
+        // 配置模板选择器（借鉴 Pterodactyl Eggs）
+        var showTemplateSelector by remember { mutableStateOf(false) }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.AutoAwesome, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Spacer(Modifier.width(8.dp))
+                    Text("快速模板", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("选择预设模板自动填充推荐配置（借鉴 Pterodactyl Eggs 设计）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f))
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        Triple("small", "小型", "1-2人"),
+                        Triple("medium", "中型", "5-10人"),
+                        Triple("large", "大型", "20+人")
+                    ).forEach { (key, label, desc) ->
+                        OutlinedButton(
+                            onClick = {
+                                applyTemplate(key, memoryInfo.totalMB.toInt()) { newMem, newArgs, newView ->
+                                    allocatedMemory = newMem
+                                    extraArgs = newArgs
+                                    viewDistance = newView.toString()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(label, style = MaterialTheme.typography.labelLarge)
+                                Text(desc, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         OutlinedTextField(
             value = name,
@@ -282,6 +335,65 @@ fun ServerConfigScreen(
             }
         }
 
+        // RCON 与备份设置
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("高级选项", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+
+                // RCON
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Computer, null, Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("RCON 远程控制"); Spacer(Modifier.width(8.dp))
+                        Switch(checked = rconEnabled, onCheckedChange = { rconEnabled = it })
+                    }
+                }
+                if (rconEnabled) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("启用后可通过标准 RCON 协议发送命令（更快、有返回值）。密码自动生成。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = rconPort,
+                        onValueChange = { rconPort = it.filter { c -> c.isDigit() } },
+                        label = { Text("RCON 端口") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = rconEnabled
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+
+                // 备份
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Backup, null, Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.tertiary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("停止时自动备份"); Spacer(Modifier.width(8.dp))
+                        Switch(checked = backupOnStop, onCheckedChange = { backupOnStop = it })
+                    }
+                }
+                if (backupOnStop) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("每次停止服务器前自动创建完整备份。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
         Button(
             onClick = {
                 scope.launch {
@@ -301,7 +413,10 @@ fun ServerConfigScreen(
                         spawnProtection = spawnProtection.toIntOrNull() ?: 16,
                         viewDistance = viewDistance.toIntOrNull()?.coerceIn(2, 32) ?: 10,
                         maxRestarts = maxRestarts.toIntOrNull() ?: 3,
-                        restartCooldownSec = restartCooldown.toIntOrNull()?.coerceAtLeast(0) ?: 5
+                        restartCooldownSec = restartCooldown.toIntOrNull()?.coerceAtLeast(0) ?: 5,
+                        rconEnabled = rconEnabled,
+                        rconPort = rconPort.toIntOrNull() ?: 25575,
+                        backupOnStop = backupOnStop
                     ))
                 }
             },
@@ -530,4 +645,44 @@ private suspend fun copyContentUriToLocal(context: Context, uri: Uri): String = 
         java.io.FileOutputStream(target).use { output -> input.copyTo(output) }
     } ?: throw IllegalStateException("无法读取 JAR 文件")
     target.absolutePath
+}
+
+/**
+ * 应用预设配置模板（借鉴 Pterodactyl Eggs / MCSManager 模板系统）。
+ *
+ * 小型 (1-2人)：适合低配设备，保守内存分配
+ * 中型 (5-10人)：均衡配置，适合大多数场景
+ * 大型 (20+人)：高性能配置，需要充足设备资源
+ */
+private fun applyTemplate(
+    template: String,
+    deviceTotalMemMB: Int,
+    onApplied: (Int, String, Int) -> Unit
+) {
+    when (template) {
+        "small" -> {
+            val mem = (deviceTotalMemMB / 4).coerceIn(512, 1536)
+            val args = "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+ParallelRefProcEnabled " +
+                       "-XX:+DisableExplicitGC -XX:+AlwaysPreTouch"
+            onApplied(mem, args, 8)
+        }
+        "medium" -> {
+            val mem = (deviceTotalMemMB / 3).coerceIn(1536, 4096)
+            val args = "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+ParallelRefProcEnabled " +
+                       "-XX:+DisableExplicitGC -XX:+AlwaysPreTouch " +
+                       "-XX:G1HeapRegionSize=4M -XX:+UnlockExperimentalVMOptions " +
+                       "-XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40"
+            onApplied(mem, args, 12)
+        }
+        "large" -> {
+            val mem = (deviceTotalMemMB / 2).coerceIn(4096, 8192)
+            val args = "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+ParallelRefProcEnabled " +
+                       "-XX:+DisableExplicitGC -XX:+AlwaysPreTouch " +
+                       "-XX:G1HeapRegionSize=4M -XX:+UnlockExperimentalVMOptions " +
+                       "-XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 " +
+                       "-XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 " +
+                       "-XX:+PerfDisableSharedMem -XX:+UseStringDeduplication"
+            onApplied(mem, args, 16)
+        }
+    }
 }

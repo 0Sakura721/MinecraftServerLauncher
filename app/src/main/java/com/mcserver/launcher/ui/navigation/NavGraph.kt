@@ -18,6 +18,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     data object Backups : Screen("backups", "备份恢复", Icons.Filled.Backup)
     data object CoreDownload : Screen("core_download", "下载核心", Icons.Filled.CloudDownload)
     data object ResourcePacks : Screen("resource_packs", "资源包", Icons.Filled.Inventory)
+    data object Schedules : Screen("schedules", "定时任务", Icons.Filled.Schedule)
 }
 
 val bottomNavItems = listOf(
@@ -35,5 +36,6 @@ val managementSubScreens = listOf(
     Screen.Players,
     Screen.Files,
     Screen.Backups,
-    Screen.ResourcePacks
+    Screen.ResourcePacks,
+    Screen.Schedules
 )

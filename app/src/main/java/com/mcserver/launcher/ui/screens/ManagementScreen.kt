@@ -151,5 +151,6 @@ private fun getScreenDescription(screen: Screen): String = when (screen) {
     Screen.Files -> "浏览服务器文件、查看崩溃报告、编辑配置文件"
     Screen.Backups -> "完整备份/恢复服务器数据，自动备份策略"
     Screen.ResourcePacks -> "管理资源包，配置强制资源包和下载 URL"
+    Screen.Schedules -> "定时执行命令、备份、重启、广播等任务"
     else -> ""
 }

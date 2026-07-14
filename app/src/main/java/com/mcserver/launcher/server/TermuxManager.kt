@@ -97,6 +97,10 @@ class TermuxManager {
     private var tailJob: Job? = null
     private var logFile: File? = null
 
+    /** RCON 客户端实例（惰性初始化，密码由配置决定） */
+    private var rconClient: RconClient? = null
+    private var rconReady = false
+
     /** 服务器进程退出时回调（用于崩溃检测 / 自动重启） */
     var onServerExited: (() -> Unit)? = null
 
@@ -408,6 +412,8 @@ class TermuxManager {
         try {
             val props = File(dir, "server.properties")
             // key -> value，仅处理本项目支持的常用项；其余项保持原样
+            // 若 RCON 密码为空，自动生成一个
+            val rconPwd = config.rconPassword.ifEmpty { RconClient.generatePassword() }
             val desired = linkedMapOf(
                 "server-port" to config.serverPort.toString(),
                 "motd" to config.motd,
@@ -419,7 +425,12 @@ class TermuxManager {
                 "white-list" to config.whiteList.toString(),
                 "spawn-protection" to config.spawnProtection.toString(),
                 "view-distance" to config.viewDistance.toString(),
-                "enable-command-block" to "true"
+                "enable-command-block" to "true",
+                // RCON 配置（仿 Pterodactyl 自动注入）
+                "enable-rcon" to config.rconEnabled.toString(),
+                "rcon.port" to config.rconPort.toString(),
+                "rcon.password" to rconPwd,
+                "broadcast-rcon-to-ops" to "true"
             )
 
             val lines = if (props.exists()) props.readLines().toMutableList()
@@ -449,7 +460,9 @@ class TermuxManager {
 
     /**
      * 向运行中的服务器发送命令（如 stop / op / gamemode）
-     * 通过命名管道喂给 java 的 stdin
+     *
+     * 优先通过 RCON 协议发送（可获取命令返回值），
+     * 若 RCON 不可用则回退到命名管道方式。
      *
      * 注意：Android 8+ 对后台启动 Service 有严格限制，应用切到后台后
      * 直接 startForegroundService 会抛异常导致命令丢失。因此这里优先
@@ -459,20 +472,159 @@ class TermuxManager {
     fun sendCommand(cmd: String) {
         if (!isRunning.get() || cmd.isBlank()) return
         emit("> $cmd")
+
+        // 优先尝试 RCON（可获取命令返回值，延迟更低）
+        if (rconReady && rconClient?.isConnected == true) {
+            sendCommandViaRcon(cmd)
+            return
+        }
+
+        // 回退：管道方式
         try {
             if (ServerForegroundService.isRunning) {
-                // 经由前台服务转发，规避后台启动 Service 限制
                 val broadcast = Intent(ServerForegroundService.ACTION_SEND_COMMAND).apply {
                     setPackage(context.packageName)
                     putExtra(ServerForegroundService.EXTRA_COMMAND, cmd)
                 }
                 context.sendBroadcast(broadcast)
             } else {
-                // 回退：应用在前台时直接写入管道（仍需经 Termux 环境）
                 writeCommandToPipe(context, cmd)
             }
         } catch (e: Exception) {
             emit("> 命令发送失败：${e.message}")
+        }
+    }
+
+    /**
+     * 通过 RCON 发送命令。
+     * 在后台协程中执行，不阻塞 UI。
+     */
+    private fun sendCommandViaRcon(cmd: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val result = rconClient?.sendCommand(cmd)
+                if (result?.isSuccess == true) {
+                    val response = result.getOrNull() ?: ""
+                    if (response.isNotBlank() && response != "Unknown command. Type \"help\" for help.") {
+                        // 某些命令（如 list、tps）有意义的返回值，显示在控制台
+                        // 但 stop 等命令的返回值可能为空或无用
+                        if (response.lines().size <= 5) {
+                            emit("  $response")
+                        }
+                    }
+                } else {
+                    // RCON 失败，回退到管道
+                    emit("> RCON 不可用，使用管道发送")
+                    try {
+                        if (ServerForegroundService.isRunning) {
+                            val broadcast = Intent(ServerForegroundService.ACTION_SEND_COMMAND).apply {
+                                setPackage(context.packageName)
+                                putExtra(ServerForegroundService.EXTRA_COMMAND, cmd)
+                            }
+                            context.sendBroadcast(broadcast)
+                        } else {
+                            writeCommandToPipe(context, cmd)
+                        }
+                    } catch (_: Exception) {}
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * 尝试建立 RCON 连接（在服务器完全启动后调用）。
+     * 在日志中检测到 "Done" 消息后由上层触发。
+     */
+    fun tryConnectRcon(config: ServerConfig) {
+        if (!config.rconEnabled) {
+            rconReady = false
+            return
+        }
+        val pwd = config.rconPassword.ifEmpty { RconClient.generatePassword() }
+        rconClient = RconClient(port = config.rconPort, password = pwd)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // 服务器启动后 RCON 端口可能需要几秒才能就绪，重试几次
+                var connected = false
+                for (attempt in 1..10) {
+                    val result = rconClient?.connect()
+                    if (result?.isSuccess == true) {
+                        connected = true
+                        break
+                    }
+                    kotlinx.coroutines.delay(2000)
+                }
+                rconReady = connected
+                if (connected) {
+                    emit("> RCON 已连接（端口 ${config.rconPort}）")
+                } else {
+                    emit("> RCON 连接失败，将使用管道发送命令")
+                    rconClient?.disconnect()
+                }
+            } catch (_: Exception) {
+                rconReady = false
+            }
+        }
+    }
+
+    /** 断开 RCON 连接 */
+    fun disconnectRcon() {
+        rconReady = false
+        rconClient?.disconnect()
+        rconClient = null
+    }
+
+    /**
+     * 导出服务器日志到文件。
+     * 包含 server.log、latest.log（如果存在）、以及崩溃报告。
+     * @return 导出文件路径，失败返回 null
+     */
+    fun exportLogs(): String? {
+        return try {
+            val dir = serverDir(context)
+            val exportDir = File(dir, "exports")
+            exportDir.mkdirs()
+            val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            val exportFile = File(exportDir, "server_logs_$timestamp.txt")
+
+            val sb = StringBuilder()
+            sb.appendLine("=== MCServer Launcher 日志导出 ===")
+            sb.appendLine("导出时间: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
+            sb.appendLine()
+
+            // server.log
+            val serverLog = File(dir, "server.log")
+            if (serverLog.exists()) {
+                sb.appendLine("=== server.log (最近 5000 行) ===")
+                val lines = serverLog.readLines()
+                val recent = if (lines.size > 5000) lines.takeLast(5000) else lines
+                recent.forEach { sb.appendLine(it) }
+                sb.appendLine()
+            }
+
+            // logs/latest.log
+            val latestLog = File(dir, "logs/latest.log")
+            if (latestLog.exists()) {
+                sb.appendLine("=== logs/latest.log ===")
+                latestLog.readLines().takeLast(2000).forEach { sb.appendLine(it) }
+                sb.appendLine()
+            }
+
+            // 崩溃报告摘要
+            val crashDir = File(dir, "crash-reports")
+            if (crashDir.exists()) {
+                crashDir.listFiles()?.sortedByDescending { it.lastModified() }?.take(3)?.forEach { crash ->
+                    sb.appendLine("=== 崩溃报告: ${crash.name} ===")
+                    crash.readLines().take(100).forEach { sb.appendLine(it) }
+                    sb.appendLine("... (截断)")
+                    sb.appendLine()
+                }
+            }
+
+            exportFile.writeText(sb.toString())
+            exportFile.absolutePath
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -521,6 +673,7 @@ class TermuxManager {
         emit("> 正在停止服务器...")
         onlinePlayers.clear()
         _players.value = emptyList()
+        disconnectRcon()
 
         val dir = serverDir(context)
         val pidFile = File(dir, "mcserver.pid")

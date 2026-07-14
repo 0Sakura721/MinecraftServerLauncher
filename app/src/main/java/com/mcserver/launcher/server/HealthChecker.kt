@@ -1,11 +1,15 @@
 package com.mcserver.launcher.server
 
 import android.content.Context
+import android.os.Build
 import com.mcserver.launcher.McApplication
 import com.mcserver.launcher.data.ServerConfig
 import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.jar.JarFile
 
 /**
@@ -368,5 +372,141 @@ object HealthChecker {
         val mb = kb / 1024.0
         if (mb < 1024) return "%.1f MB".format(mb)
         return "%.2f GB".format(mb / 1024.0)
+    }
+
+    /**
+     * 生成完整的系统诊断报告（借鉴 MCSManager 诊断面板）。
+     * 包含设备信息、系统资源、服务器配置摘要等。
+     */
+    fun generateDiagnosticReport(config: ServerConfig): String {
+        val sb = StringBuilder()
+        val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+
+        sb.appendLine("========================================")
+        sb.appendLine("  MCServer Launcher 诊断报告")
+        sb.appendLine("  生成时间: $now")
+        sb.appendLine("========================================")
+        sb.appendLine()
+
+        // 设备信息
+        sb.appendLine("--- 设备信息 ---")
+        sb.appendLine("  设备型号: ${Build.MODEL}")
+        sb.appendLine("  制造商: ${Build.MANUFACTURER}")
+        sb.appendLine("  Android 版本: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+        sb.appendLine("  CPU 架构: ${Build.SUPPORTED_ABIS.joinToString(", ")}")
+        sb.appendLine("  CPU 核心数: ${Runtime.getRuntime().availableProcessors()}")
+        sb.appendLine()
+
+        // 内存信息
+        val runtime = Runtime.getRuntime()
+        val totalMem = runtime.maxMemory() / (1024 * 1024)
+        val freeMem = runtime.freeMemory() / (1024 * 1024)
+        val usedMem = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
+        sb.appendLine("--- 内存信息 ---")
+        sb.appendLine("  应用可用最大内存: ${totalMem}MB")
+        sb.appendLine("  当前已用: ${usedMem}MB")
+        sb.appendLine("  当前空闲: ${freeMem}MB")
+        sb.appendLine()
+
+        // 存储信息
+        val serverDir = serverDir
+        val totalSpace = serverDir.totalSpace / (1024 * 1024)
+        val freeSpace = serverDir.freeSpace / (1024 * 1024)
+        val usableSpace = serverDir.usableSpace / (1024 * 1024)
+        sb.appendLine("--- 存储信息 ---")
+        sb.appendLine("  服务器目录: ${serverDir.absolutePath}")
+        sb.appendLine("  分区总空间: ${formatFileSize(totalSpace * 1024 * 1024)}")
+        sb.appendLine("  可用空间: ${formatFileSize(usableSpace * 1024 * 1024)}")
+        sb.appendLine("  空闲空间: ${formatFileSize(freeSpace * 1024 * 1024)}")
+        sb.appendLine()
+
+        // Termux 状态
+        sb.appendLine("--- Termux 环境 ---")
+        sb.appendLine("  Termux 已安装: ${TermuxManager.isTermuxInstalled(context)}")
+        sb.appendLine("  Bash 路径: ${TermuxManager.getTermuxBashPath()}")
+        val termuxState = TermuxManager().checkState()
+        sb.appendLine("  状态: ${termuxState.name}")
+        sb.appendLine()
+
+        // Java 信息
+        sb.appendLine("--- Java 运行时 ---")
+        sb.appendLine("  Java 版本: ${System.getProperty("java.version", "未知")}")
+        sb.appendLine("  Java 厂商: ${System.getProperty("java.vendor", "未知")}")
+        sb.appendLine("  系统架构: ${System.getProperty("os.arch", "未知")}")
+        sb.appendLine()
+
+        // 服务器配置
+        sb.appendLine("--- 服务器配置 ---")
+        sb.appendLine("  名称: ${config.name}")
+        sb.appendLine("  JAR 路径: ${config.jarPath}")
+        sb.appendLine("  分配内存: ${config.allocatedMemoryMB}MB")
+        sb.appendLine("  端口: ${config.serverPort}")
+        sb.appendLine("  游戏模式: ${config.gamemode}")
+        sb.appendLine("  难度: ${config.difficulty}")
+        sb.appendLine("  最大玩家: ${config.maxPlayers}")
+        sb.appendLine("  正版验证: ${config.onlineMode}")
+        sb.appendLine("  PVP: ${config.pvp}")
+        sb.appendLine("  白名单: ${config.whiteList}")
+        sb.appendLine("  视距: ${config.viewDistance}")
+        sb.appendLine("  自动重启: ${config.autoRestart}")
+        sb.appendLine("  最大重启次数: ${config.maxRestarts}")
+        sb.appendLine("  重启冷却: ${config.restartCooldownSec}秒")
+        sb.appendLine("  RCON: ${if (config.rconEnabled) "启用 (端口 ${config.rconPort})" else "禁用"}")
+        sb.appendLine("  JVM 参数: ${config.additionalArgs}")
+        sb.appendLine()
+
+        // 服务器目录内容
+        sb.appendLine("--- 服务器目录 ---")
+        if (serverDir.exists()) {
+            serverDir.listFiles()?.sortedBy { it.name }?.forEach { file ->
+                val type = when {
+                    file.isDirectory -> "[DIR]"
+                    file.extension == "jar" -> "[JAR]"
+                    file.extension == "log" -> "[LOG]"
+                    else -> "[FILE]"
+                }
+                sb.appendLine("  $type ${file.name} (${formatFileSize(file.length())})")
+            }
+        } else {
+            sb.appendLine("  (目录不存在)")
+        }
+        sb.appendLine()
+
+        // 健康检查结果
+        sb.appendLine("--- 健康检查 ---")
+        val health = runAllChecks(config)
+        health.checks.forEach { check ->
+            val status = if (check.passed) "PASS" else "FAIL"
+            sb.appendLine("  [$status] ${check.name}: ${check.message}")
+        }
+        if (health.warnings.isNotEmpty()) {
+            sb.appendLine("  注意事项:")
+            health.warnings.forEach { sb.appendLine("    - $it") }
+        }
+        if (health.recommendations.isNotEmpty()) {
+            sb.appendLine("  推荐优化:")
+            health.recommendations.forEach { sb.appendLine("    - $it") }
+        }
+        sb.appendLine()
+
+        sb.appendLine("========================================")
+        sb.appendLine("  报告结束")
+        sb.appendLine("========================================")
+
+        return sb.toString()
+    }
+
+    /**
+     * 导出诊断报告到文件。
+     * @return 报告文件路径
+     */
+    fun exportDiagnosticReport(config: ServerConfig): File {
+        val report = generateDiagnosticReport(config)
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val reportDir = File(serverDir, "diagnostics")
+        reportDir.mkdirs()
+        val reportFile = File(reportDir, "diagnostic_$timestamp.txt")
+        reportFile.writeText(report)
+        return reportFile
     }
 }

@@ -107,12 +107,16 @@ class ServerManager private constructor() {
 
         startForeground()
 
+        // 记录进程退出时间（在回调触发时立即记录，而非在分支逻辑内）
+        val exitTime = System.currentTimeMillis()
+
         // 服务器进程退出回调：崩溃检测 + 自动重启 + 手动停止收尾
         termuxManager.onServerExited = {
             serverScope.launch {
                 if (manualStop.get()) {
                     // 用户主动停止，正常收尾
                     restartCount = 0
+                    lastExitTime = 0L
                     if (config.backupOnStop) {
                         termuxManager.notifyConsole("> 正在创建停止前备份...")
                         BackupManager.createBackup("stop").onSuccess {
@@ -127,14 +131,19 @@ class ServerManager private constructor() {
                     stopForeground()
                 } else {
                     // 非手动停止：进程异常退出
-                    lastExitTime = System.currentTimeMillis()
                     val max = config.maxRestarts
                     val triggered = max > 0 && restartCount >= max
                     if (config.autoRestart && !triggered) {
                         // 遵守最小冷却时间，避免崩溃循环瞬间刷屏
-                        val elapsed = (System.currentTimeMillis() - lastExitTime)
+                        // 冷却基准 = 上次退出时间（非本次），首次崩溃没有冷却限制
                         val cooldownMs = config.restartCooldownSec * 1000L
-                        if (elapsed < cooldownMs) delay(cooldownMs - elapsed)
+                        if (lastExitTime > 0) {
+                            val elapsed = exitTime - lastExitTime
+                            if (elapsed < cooldownMs) {
+                                delay(cooldownMs - elapsed)
+                            }
+                        }
+                        lastExitTime = System.currentTimeMillis()
                         restartCount++
                         termuxManager.notifyConsole(
                             "> 检测到服务器退出，第 $restartCount 次自动重启（最多 $max 次）"
@@ -147,6 +156,7 @@ class ServerManager private constructor() {
                                 "请检查日志排查原因。"
                             )
                         }
+                        lastExitTime = 0L
                         restartCount = 0
                         ServerStateManager.onServerCrashed()
                         _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
@@ -175,6 +185,10 @@ class ServerManager private constructor() {
             ServerStateManager.onServerStarted(config)
             PerformanceMonitor.instance.startMonitoring()
             startUptime()
+            // 启动成功后尝试建立 RCON 连接
+            if (config.rconEnabled) {
+                termuxManager.tryConnectRcon(config)
+            }
             // 启动成功后，进程的实际退出由 onServerExited 回调处理
         }
     }

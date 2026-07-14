@@ -39,6 +39,10 @@ class PreferencesManager(private val context: Context) {
         private val KEY_MAX_RESTARTS = intPreferencesKey("max_restarts")
         private val KEY_RESTART_COOLDOWN = intPreferencesKey("restart_cooldown")
         private val KEY_BACKUP_ON_STOP = booleanPreferencesKey("backup_on_stop")
+        // RCON 配置
+        private val KEY_RCON_ENABLED = booleanPreferencesKey("rcon_enabled")
+        private val KEY_RCON_PASSWORD = stringPreferencesKey("rcon_password")
+        private val KEY_RCON_PORT = intPreferencesKey("rcon_port")
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
@@ -73,7 +77,10 @@ class PreferencesManager(private val context: Context) {
             viewDistance = prefs[KEY_VIEW_DISTANCE] ?: 10,
             maxRestarts = prefs[KEY_MAX_RESTARTS] ?: 3,
             restartCooldownSec = prefs[KEY_RESTART_COOLDOWN] ?: 5,
-            backupOnStop = prefs[KEY_BACKUP_ON_STOP] ?: false
+            backupOnStop = prefs[KEY_BACKUP_ON_STOP] ?: false,
+            rconEnabled = prefs[KEY_RCON_ENABLED] ?: true,
+            rconPassword = prefs[KEY_RCON_PASSWORD] ?: "",
+            rconPort = prefs[KEY_RCON_PORT] ?: 25575
         )
     }
 
@@ -106,6 +113,9 @@ class PreferencesManager(private val context: Context) {
             prefs[KEY_MAX_RESTARTS] = config.maxRestarts
             prefs[KEY_RESTART_COOLDOWN] = config.restartCooldownSec
             prefs[KEY_BACKUP_ON_STOP] = config.backupOnStop
+            prefs[KEY_RCON_ENABLED] = config.rconEnabled
+            prefs[KEY_RCON_PASSWORD] = config.rconPassword
+            prefs[KEY_RCON_PORT] = config.rconPort
         }
     }
 

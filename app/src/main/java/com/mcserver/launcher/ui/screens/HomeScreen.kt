@@ -20,6 +20,7 @@ import com.mcserver.launcher.server.ServerManager
 import com.mcserver.launcher.server.TermuxManager
 import com.mcserver.launcher.server.TermuxState
 import com.mcserver.launcher.ui.components.ServerStatusCard
+import com.mcserver.launcher.ui.components.PerformanceChartCard
 import com.mcserver.launcher.ui.components.formatUptime
 import kotlinx.coroutines.launch
 
@@ -34,6 +35,7 @@ fun HomeScreen(
     val serverStatus by serverManager.serverStatus.collectAsState()
     val jreInfo by serverManager.jreInfo.collectAsState()
     val perfMetrics by PerformanceMonitor.instance.metrics.collectAsState()
+    val perfHistory by PerformanceMonitor.instance.history.collectAsState()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -282,6 +284,21 @@ fun HomeScreen(
         // 性能监控（仅运行时显示）
         if (serverStatus.state == ServerState.RUNNING) {
             PerformanceCard(metrics = perfMetrics)
+
+            Spacer(Modifier.height(8.dp))
+
+            // 性能趋势图表
+            if (perfHistory.cpuHistory.size >= 2) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    PerformanceChartCard(
+                        history = perfHistory,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
         }
 
         // 健康检查结果弹窗

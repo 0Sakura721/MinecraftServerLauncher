@@ -23,7 +23,11 @@ data class ServerConfig(
     val maxRestarts: Int = 3,               // 连续崩溃最大自动重启次数，0=不限制
     val restartCooldownSec: Int = 5,        // 两次重启之间的最小冷却时间
     // 备份（仿 MCSManager）
-    val backupOnStop: Boolean = false       // 停止服务器时自动备份一次
+    val backupOnStop: Boolean = false,      // 停止服务器时自动备份一次
+    // RCON 远程控制（仿 Pterodactyl / MCSManager 的控制台设计）
+    val rconEnabled: Boolean = true,        // 启用 RCON 协议
+    val rconPassword: String = "",          // RCON 密码（空则自动生成）
+    val rconPort: Int = 25575              // RCON 端口
 ) {
     // 运行时：最大堆 = 用户分配值，最小堆 = 其一半（不低于 256MB）
     val maxRamMB: Int get() = allocatedMemoryMB
