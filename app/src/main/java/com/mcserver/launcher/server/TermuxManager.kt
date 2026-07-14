@@ -161,8 +161,8 @@ class TermuxManager {
                 // 重置在线玩家统计
                 onlinePlayers.clear()
                 _players.value = emptyList()
-                // 让配置中的端口生效（写入/更新 server.properties）
-                prepareServerProperties(serverDir, config.serverPort)
+                // 让配置中的 server.properties 项生效（端口/模式/难度/最大玩家等）
+                prepareServerProperties(serverDir, config)
                 // 自动接受 EULA（Minecraft 首次启动会因 eula=false 直接退出）
                 prepareEula(serverDir)
 
@@ -197,19 +197,22 @@ class TermuxManager {
                 val script = buildString {
                     appendLine("#!/data/data/com.termux/files/usr/bin/bash")
                     appendLine("cd ${serverDir.absolutePath}")
-                    // 清理可能残留的监听管道
+                    // 清理可能残留的管道
                     appendLine("rm -f '$pipePath'")
                     appendLine("mkfifo '$pipePath'")
                     appendLine("echo '--- Minecraft Server Started ---' > '$logPath'")
                     appendLine(": > '$pidFile'")
-                    // 通过命名管道把控制台命令喂给 java 的 stdin")
-                    appendLine("tail -f '$pipePath' | $termuxJava -Xmx${xmx}M -Xms${xms}M $args -jar '${targetJar.name}' $noguiArg >> '$logPath' 2>&1 &")
+                    // 关键：让 java 直接从命名管道读取 stdin（而非 tail -f | java）。
+                    // 这样停止时只需 kill java 进程，管道写端关闭，java 读到 EOF 自然退出，
+                    // 不会再遗留 tail 进程，也无需 pkill 整条命令（仿 Pterodactyl 的进程分组管理）。
+                    appendLine("$termuxJava -Xmx${xmx}M -Xms${xms}M $args -jar '${targetJar.name}' $noguiArg >> '$logPath' 2>&1 < '$pipePath' &")
                     appendLine("JAVA_PID=\$!")
-                    // 记录 java 进程 PID，供精确停止（不再依赖写死的 jar 名做 pkill）")
+                    // 记录 java 进程 PID，供精确停止（不再依赖写死的 jar 名做 pkill）
                     appendLine("echo \$JAVA_PID > '$pidFile'")
-                    // 阻塞直到 java 退出，再写入结束标记（用于崩溃/停止检测")
+                    // 阻塞直到 java 退出，再写入结束标记（用于崩溃/停止检测）
                     appendLine("wait \$JAVA_PID")
                     appendLine("echo '--- Server Stopped ---' >> '$logPath'")
+                    appendLine("rm -f '$pipePath' '$pidFile'")
                 }
                 scriptFile.writeText(script)
                 scriptFile.setExecutable(true)
@@ -288,6 +291,7 @@ class TermuxManager {
                             if (line.isNotBlank()) {
                                 _consoleOutput.tryEmit(line)
                                 parsePlayerEvent(line)
+                                detectStartupIssues(line)
                             }
                         }
                         leftover = if (endsWithNewline) byteArrayOf()
@@ -312,6 +316,22 @@ class TermuxManager {
         onlinePlayers.clear()
         _players.value = emptyList()
         try { onServerExited?.invoke() } catch (_: Exception) {}
+    }
+
+    /** 识别常见启动失败原因，给出友好提示（健康检查，仿 MCSManager 的诊断） */
+    private fun detectStartupIssues(line: String) {
+        when {
+            line.contains("Address already in use") ->
+                emit("> 警告：端口被占用，请检查 server.properties 或配置页端口设置")
+            line.contains("Invalid or corrupt jarfile") ->
+                emit("> 错误：JAR 文件损坏，请重新选择/下载服务器核心")
+            line.contains("UnsupportedClassVersionError") ->
+                emit("> 错误：JAR 要求的 Java 版本高于当前运行环境，请在设置页切到更高版本 JRE")
+            line.contains("You need to agree to the EULA") ->
+                emit("> 错误：EULA 未被接受，正在自动写入 eula=true 后重试")
+            line.contains("java.lang.OutOfMemoryError") ->
+                emit("> 错误：内存不足（OOM），请在配置页降低内存分配或关闭其他应用")
+        }
     }
 
     /** 从日志行解析玩家加入/离开，维护在线列表 */
@@ -351,27 +371,45 @@ class TermuxManager {
         }
     }
 
-    /** 让配置中的端口生效：写入或更新 server.properties 的 server-port */
-    private fun prepareServerProperties(dir: File, port: Int) {
+    /** 让配置中的 server.properties 项生效：写入或更新（仿 Pterodactyl 的变量注入） */
+    private fun prepareServerProperties(dir: File, config: ServerConfig) {
         try {
             val props = File(dir, "server.properties")
-            if (props.exists()) {
-                val lines = props.readLines().toMutableList()
+            // key -> value，仅处理本项目支持的常用项；其余项保持原样
+            val desired = linkedMapOf(
+                "server-port" to config.serverPort.toString(),
+                "motd" to config.motd,
+                "max-players" to config.maxPlayers.toString(),
+                "gamemode" to config.gamemode,
+                "difficulty" to config.difficulty,
+                "pvp" to config.pvp.toString(),
+                "online-mode" to config.onlineMode.toString(),
+                "white-list" to config.whiteList.toString(),
+                "spawn-protection" to config.spawnProtection.toString(),
+                "view-distance" to config.viewDistance.toString(),
+                "enable-command-block" to "true"
+            )
+
+            val lines = if (props.exists()) props.readLines().toMutableList()
+            else mutableListOf()
+
+            for ((key, value) in desired) {
                 var found = false
                 for (i in lines.indices) {
-                    if (lines[i].trim().startsWith("server-port")) {
-                        lines[i] = "server-port=$port"
+                    if (lines[i].trim().startsWith("$key=")) {
+                        lines[i] = "$key=$value"
                         found = true
+                        break
                     }
                 }
-                if (!found) lines.add("server-port=$port")
-                props.writeText(lines.joinToString("\n"))
-            } else {
-                props.writeText("server-port=$port\n")
+                if (!found) lines.add("$key=$value")
             }
-            emit("> 端口: $port")
+            props.writeText(lines.joinToString("\n") + "\n")
+            emit("> 端口: ${config.serverPort}")
+            emit("> 模式: ${config.gamemode} / 难度: ${config.difficulty} / 最大玩家: ${config.maxPlayers}")
+            emit("> 在线模式: ${if (config.onlineMode) "正版验证" else "离线"} / PVP: ${config.pvp}")
         } catch (e: Exception) {
-            emit("> 端口设置失败：${e.message}")
+            emit("> server.properties 设置失败：${e.message}")
         }
     }
 
@@ -456,21 +494,22 @@ class TermuxManager {
         val pidFile = File(dir, "mcserver.pid")
         val pipe = File(dir, "cmdpipe")
 
-        // 步骤 1：先尝试优雅关闭（向命名管道写入 stop 命令）
+        // 步骤 1：先尝试优雅关闭（向命名管道写入 stop 命令，java 读到后保存并退出）
         if (pipe.exists()) {
             try {
                 writeCommandToPipe(context, "stop")
             } catch (_: Exception) {}
         }
 
-        // 步骤 2 / 3：读取精确 PID，先 TERM 后 KILL，避免误杀其它进程
+        // 步骤 2 / 3：等待停止命令生效后，按精确 PID 先 TERM 后 KILL。
+        // 由于 java 直接以管道为 stdin，kill 后管道写端亦随之关闭，java 收到 EOF 自然退出，
+        // 不会遗留任何喂数据的辅助进程，因此无需 pkill。
         val stopScript = File(dir, "stop.sh")
         val pidPath = pidFile.absolutePath
-        val pipePath = pipe.absolutePath
         stopScript.writeText(
             "#!/data/data/com.termux/files/usr/bin/bash\n" +
-            // 5s 后若仍在运行，按 PID 精确结束
-            "sleep 5\n" +
+            // 给 stop 命令 8s 优雅保存时间
+            "sleep 8\n" +
             "if [ -f '$pidPath' ]; then\n" +
             "  PID=\$(cat '$pidPath' 2>/dev/null)\n" +
             "  if [ -n \"\$PID\" ] && kill -0 \"\$PID\" 2>/dev/null; then\n" +
@@ -480,8 +519,6 @@ class TermuxManager {
             "    kill -0 \"\$PID\" 2>/dev/null && kill -KILL \"\$PID\" 2>/dev/null\n" +
             "  fi\n" +
             "fi\n" +
-            // 兜底：清理管道监听进程（tail -f cmdpipe）
-            "pkill -f '${pipePath}' 2>/dev/null || true\n" +
             "rm -f '$pidPath'\n"
         )
         stopScript.setExecutable(true)
@@ -496,9 +533,9 @@ class TermuxManager {
             else context.startService(intent)
         } catch (_: Exception) {}
 
-        // 收尾兜底：若 12 秒后仍未收到退出标记，强制标记为已停止
+        // 收尾兜底：若 15 秒后仍未收到退出标记，强制标记为已停止
         CoroutineScope(Dispatchers.IO).launch {
-            delay(12000)
+            delay(15000)
             if (isRunning.get()) {
                 isRunning.set(false)
                 _stateChanged.tryEmit(false)

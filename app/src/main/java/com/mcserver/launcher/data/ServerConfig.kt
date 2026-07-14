@@ -8,7 +8,22 @@ data class ServerConfig(
     val serverPort: Int = 25565,
     val additionalArgs: String = "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200",
     val autoRestart: Boolean = false,
-    val nogui: Boolean = true
+    val nogui: Boolean = true,
+    // server.properties 常用项（启动前注入，仿 Pterodactyl 的变量注入）
+    val motd: String = "A Minecraft Server",
+    val maxPlayers: Int = 20,
+    val gamemode: String = "survival",     // survival / creative / adventure / spectator
+    val difficulty: String = "easy",       // peaceful / easy / normal / hard
+    val pvp: Boolean = true,
+    val onlineMode: Boolean = true,         // true=正版验证，false=离线模式
+    val whiteList: Boolean = false,
+    val spawnProtection: Int = 16,
+    val viewDistance: Int = 10,
+    // 自动重启保护（仿 Pterodactyl restart policy）
+    val maxRestarts: Int = 3,               // 连续崩溃最大自动重启次数，0=不限制
+    val restartCooldownSec: Int = 5,        // 两次重启之间的最小冷却时间
+    // 备份（仿 MCSManager）
+    val backupOnStop: Boolean = false       // 停止服务器时自动备份一次
 ) {
     // 运行时：最大堆 = 用户分配值，最小堆 = 其一半（不低于 256MB）
     val maxRamMB: Int get() = allocatedMemoryMB
@@ -29,7 +44,9 @@ data class ServerStatus(
     val uptimeSeconds: Long = 0,
     val memoryUsedMB: Long = 0,
     val playerCount: Int = 0,
-    val players: List<String> = emptyList()
+    val players: List<String> = emptyList(),
+    val restartCount: Int = 0,
+    val maxRestarts: Int = 0
 )
 
 enum class JreStatus {

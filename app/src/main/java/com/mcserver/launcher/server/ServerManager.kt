@@ -33,11 +33,24 @@ class ServerManager private constructor() {
     val currentJavaPath: String? get() = jreManager.currentJavaPath
     val mirror: String get() = jreManager.mirror
 
+    /** 备份列表（仿 MCSManager） */
+    val backups: StateFlow<List<BackupManager.BackupEntry>> get() = BackupManager.backups
+    suspend fun refreshBackups() = BackupManager.refresh()
+    suspend fun createBackup(label: String = "") =
+        BackupManager.createBackup(label).also { refreshBackups() }
+    suspend fun restoreBackup(name: String) =
+        BackupManager.restoreBackup(name).also { refreshBackups() }
+    suspend fun deleteBackup(name: String) =
+        BackupManager.deleteBackup(name).also { refreshBackups() }
+
     private var serverJob: Job? = null
     private var uptimeJob: Job? = null
     private var lastConfig: ServerConfig? = null
     /** 区分「用户手动停止」与「崩溃退出」，避免自动重启把手动停止的服务器又拉起来 */
     private val manualStop = AtomicBoolean(false)
+    /** 连续崩溃自动重启次数（仿 Pterodactyl restart policy） */
+    private var restartCount = 0
+    private var lastExitTime = 0L
 
     init {
         // 将在线玩家列表同步到状态，供界面展示
@@ -72,6 +85,8 @@ class ServerManager private constructor() {
         if (termuxManager.running) return
         lastConfig = config
         manualStop.set(false)
+        // 全新启动，重置崩溃计数
+        restartCount = 0
         launchServer(config)
     }
 
@@ -91,16 +106,46 @@ class ServerManager private constructor() {
         termuxManager.onServerExited = {
             serverScope.launch {
                 if (manualStop.get()) {
+                    // 用户主动停止，正常收尾
+                    restartCount = 0
+                    if (config.backupOnStop) {
+                        termuxManager.notifyConsole("> 正在创建停止前备份...")
+                        BackupManager.createBackup("stop").onSuccess {
+                            termuxManager.notifyConsole("> 备份完成：$it")
+                        }.onFailure {
+                            termuxManager.notifyConsole("> 备份失败：${it.message}")
+                        }
+                    }
                     _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
                     stopUptime()
                     stopForeground()
-                } else if (config.autoRestart) {
-                    termuxManager.notifyConsole("> 自动重启已开启，正在重新启动服务器...")
-                    launchServer(config)
                 } else {
-                    _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
-                    stopUptime()
-                    stopForeground()
+                    // 非手动停止：进程异常退出
+                    lastExitTime = System.currentTimeMillis()
+                    val max = config.maxRestarts
+                    val triggered = max > 0 && restartCount >= max
+                    if (config.autoRestart && !triggered) {
+                        // 遵守最小冷却时间，避免崩溃循环瞬间刷屏
+                        val elapsed = (System.currentTimeMillis() - lastExitTime)
+                        val cooldownMs = config.restartCooldownSec * 1000L
+                        if (elapsed < cooldownMs) delay(cooldownMs - elapsed)
+                        restartCount++
+                        termuxManager.notifyConsole(
+                            "> 检测到服务器退出，第 $restartCount 次自动重启（最多 $max 次）"
+                        )
+                        launchServer(config)
+                    } else {
+                        if (triggered) {
+                            termuxManager.notifyConsole(
+                                "> 已连续崩溃 $restartCount 次，超过上限 $max，停止自动重启。" +
+                                "请检查日志排查原因。"
+                            )
+                        }
+                        restartCount = 0
+                        _serverStatus.value = ServerStatus(state = ServerState.STOPPED)
+                        stopUptime()
+                        stopForeground()
+                    }
                 }
             }
         }
@@ -108,13 +153,14 @@ class ServerManager private constructor() {
         serverJob = serverScope.launch {
             _serverStatus.value = _serverStatus.value.copy(
                 state = ServerState.RUNNING,
-                memoryUsedMB = config.allocatedMemoryMB.toLong()
+                memoryUsedMB = config.allocatedMemoryMB.toLong(),
+                maxRestarts = config.maxRestarts
             )
             startUptime()
             val result = termuxManager.startServer(config)
             if (result.isFailure) {
                 stopUptime()
-                _serverStatus.value = ServerStatus(state = ServerState.ERROR)
+                _serverStatus.value = ServerStatus(state = ServerState.ERROR, maxRestarts = config.maxRestarts)
                 stopForeground()
                 termuxManager.onServerExited = null
             }

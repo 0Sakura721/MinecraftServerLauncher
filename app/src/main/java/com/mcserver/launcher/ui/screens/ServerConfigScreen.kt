@@ -40,6 +40,19 @@ fun ServerConfigScreen(
     var extraArgs by remember { mutableStateOf(config.additionalArgs) }
     var autoRestart by remember { mutableStateOf(config.autoRestart) }
     var nogui by remember { mutableStateOf(config.nogui) }
+    // server.properties 项
+    var motd by remember { mutableStateOf(config.motd) }
+    var maxPlayers by remember { mutableStateOf(config.maxPlayers.toString()) }
+    var gamemode by remember { mutableStateOf(config.gamemode) }
+    var difficulty by remember { mutableStateOf(config.difficulty) }
+    var pvp by remember { mutableStateOf(config.pvp) }
+    var onlineMode by remember { mutableStateOf(config.onlineMode) }
+    var whiteList by remember { mutableStateOf(config.whiteList) }
+    var spawnProtection by remember { mutableStateOf(config.spawnProtection.toString()) }
+    var viewDistance by remember { mutableStateOf(config.viewDistance.toString()) }
+    // 自动重启保护
+    var maxRestarts by remember { mutableStateOf(config.maxRestarts.toString()) }
+    var restartCooldown by remember { mutableStateOf(config.restartCooldownSec.toString()) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -135,6 +148,80 @@ fun ServerConfigScreen(
             }
         }
 
+        // 游戏设置（写入 server.properties）
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("游戏设置", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = motd,
+                    onValueChange = { motd = it },
+                    label = { Text("服务器描述 (MOTD)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = maxPlayers,
+                        onValueChange = { maxPlayers = it.filter { c -> c.isDigit() } },
+                        label = { Text("最大玩家") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = viewDistance,
+                        onValueChange = { viewDistance = it.filter { c -> c.isDigit() } },
+                        label = { Text("视距") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GameModeSelector("游戏模式", gamemode) { gamemode = it }
+                    GameModeSelector("难度", difficulty) { difficulty = it }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = spawnProtection,
+                    onValueChange = { spawnProtection = it.filter { c -> c.isDigit() } },
+                    label = { Text("出生点保护范围 (方块)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("PVP"); Spacer(Modifier.width(8.dp))
+                        Switch(checked = pvp, onCheckedChange = { pvp = it })
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("正版验证"); Spacer(Modifier.width(8.dp))
+                        Switch(checked = onlineMode, onCheckedChange = { onlineMode = it })
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("白名单"); Spacer(Modifier.width(8.dp))
+                        Switch(checked = whiteList, onCheckedChange = { whiteList = it })
+                    }
+                }
+                if (!onlineMode) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "离线模式已开启：允许未登录正版的玩家加入（存在冒名风险）。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+            }
+        }
+
         // 高级
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -152,14 +239,40 @@ fun ServerConfigScreen(
                     minLines = 2, maxLines = 4
                 )
                 Spacer(Modifier.height(8.dp))
+
+                // 自动重启保护（仿 Pterodactyl restart policy）
+                Column {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("自动重启（崩溃时）"); Spacer(Modifier.width(8.dp))
+                            Switch(checked = autoRestart, onCheckedChange = { autoRestart = it })
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = maxRestarts,
+                            onValueChange = { maxRestarts = it.filter { c -> c.isDigit() } },
+                            label = { Text("最大重启次数 (0=不限)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = restartCooldown,
+                            onValueChange = { restartCooldown = it.filter { c -> c.isDigit() } },
+                            label = { Text("重启冷却 (秒)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("无 GUI 模式"); Spacer(Modifier.width(8.dp))
                         Switch(checked = nogui, onCheckedChange = { nogui = it })
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("自动重启"); Spacer(Modifier.width(8.dp))
-                        Switch(checked = autoRestart, onCheckedChange = { autoRestart = it })
                     }
                 }
             }
@@ -176,7 +289,15 @@ fun ServerConfigScreen(
                         allocatedMemoryMB = allocatedMemory,
                         serverPort = port.toIntOrNull() ?: 25565,
                         additionalArgs = extraArgs,
-                        autoRestart = autoRestart, nogui = nogui
+                        autoRestart = autoRestart, nogui = nogui,
+                        motd = motd.ifBlank { "A Minecraft Server" },
+                        maxPlayers = maxPlayers.toIntOrNull() ?: 20,
+                        gamemode = gamemode, difficulty = difficulty,
+                        pvp = pvp, onlineMode = onlineMode, whiteList = whiteList,
+                        spawnProtection = spawnProtection.toIntOrNull() ?: 16,
+                        viewDistance = viewDistance.toIntOrNull()?.coerceIn(2, 32) ?: 10,
+                        maxRestarts = maxRestarts.toIntOrNull() ?: 3,
+                        restartCooldownSec = restartCooldown.toIntOrNull()?.coerceAtLeast(0) ?: 5
                     ))
                 }
             },
@@ -193,6 +314,52 @@ fun ServerConfigScreen(
 }
 
 // ─── 内存分配卡片 ───
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GameModeSelector(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    val options = if (label == "游戏模式")
+        listOf("survival" to "生存", "creative" to "创造", "adventure" to "冒险", "spectator" to "观察者")
+    else
+        listOf("peaceful" to "和平", "easy" to "简单", "normal" to "普通", "hard" to "困难")
+
+    var expanded by remember { mutableStateOf(false) }
+    val current = options.firstOrNull { it.first == value }?.second ?: value
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.weight(1f)
+    ) {
+        OutlinedTextField(
+            value = current,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            singleLine = true
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { (key, display) ->
+                DropdownMenuItem(
+                    text = { Text(display) },
+                    onClick = {
+                        onValueChange(key)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun MemoryAllocationCard(

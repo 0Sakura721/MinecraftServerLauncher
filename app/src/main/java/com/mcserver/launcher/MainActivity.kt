@@ -125,6 +125,16 @@ fun MainApp(
                     }
                 )
             }
+            composable(Screen.Backups.route) {
+                BackupsScreen(
+                    config = config,
+                    onConfigSave = { newConfig ->
+                        scope.launch {
+                            prefsManager.saveServerConfig(newConfig)
+                        }
+                    }
+                )
+            }
             composable(Screen.Settings.route) {
                 SettingsScreen(
                     currentTheme = themeMode,
