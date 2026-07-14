@@ -154,6 +154,7 @@ class ServerManager private constructor() {
             val result = termuxManager.startServer(config)
             if (result.isFailure) {
                 stopUptime()
+                PerformanceMonitor.instance.stopMonitoring()
                 _serverStatus.value = ServerStatus(state = ServerState.ERROR, maxRestarts = config.maxRestarts)
                 stopForeground()
                 termuxManager.onServerExited = null
@@ -164,6 +165,7 @@ class ServerManager private constructor() {
                 memoryUsedMB = config.allocatedMemoryMB.toLong(),
                 maxRestarts = config.maxRestarts
             )
+            PerformanceMonitor.instance.startMonitoring()
             startUptime()
             // 启动成功后，进程的实际退出由 onServerExited 回调处理
         }
@@ -208,7 +210,7 @@ class ServerManager private constructor() {
         }
     }
 
-    private fun stopUptime() { uptimeJob?.cancel(); uptimeJob = null }
+    private fun stopUptime() { uptimeJob?.cancel(); uptimeJob = null; PerformanceMonitor.instance.stopMonitoring() }
 
     private fun startForeground() {
         try {

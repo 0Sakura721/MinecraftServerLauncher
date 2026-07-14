@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -200,7 +202,7 @@ fun FilesScreen() {
                             currentDir = TermuxManager.serverDir(context)
                         }
                     ) {
-                        Icon(Icons.Filled.ArrowBack, null, Modifier.size(16.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("返回根目录")
                     }
@@ -347,7 +349,7 @@ private fun FileCard(
                 Icon(
                     when {
                         entry.isDirectory -> Icons.Filled.Folder
-                        entry.isJar -> Icons.Filled.InsertDriveFile
+                        entry.isJar -> Icons.AutoMirrored.Filled.InsertDriveFile
                         entry.isLog -> Icons.Filled.BugReport
                         entry.isConfig -> Icons.Filled.Settings
                         else -> Icons.Filled.Description

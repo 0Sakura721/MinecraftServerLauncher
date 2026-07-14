@@ -292,6 +292,7 @@ class TermuxManager {
                                 _consoleOutput.tryEmit(line)
                                 parsePlayerEvent(line)
                                 detectStartupIssues(line)
+                                PerformanceMonitor.instance.feedLogLine(line)
                             }
                         }
                         leftover = if (endsWithNewline) byteArrayOf()

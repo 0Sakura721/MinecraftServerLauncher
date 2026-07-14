@@ -14,10 +14,13 @@ import androidx.compose.ui.unit.dp
 import com.mcserver.launcher.data.JreStatus
 import com.mcserver.launcher.data.ServerConfig
 import com.mcserver.launcher.data.ServerState
+import com.mcserver.launcher.server.HealthChecker
+import com.mcserver.launcher.server.PerformanceMonitor
 import com.mcserver.launcher.server.ServerManager
 import com.mcserver.launcher.server.TermuxManager
 import com.mcserver.launcher.server.TermuxState
 import com.mcserver.launcher.ui.components.ServerStatusCard
+import com.mcserver.launcher.ui.components.formatUptime
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,11 +33,14 @@ fun HomeScreen(
     val serverManager = ServerManager.instance
     val serverStatus by serverManager.serverStatus.collectAsState()
     val jreInfo by serverManager.jreInfo.collectAsState()
+    val perfMetrics by PerformanceMonitor.instance.metrics.collectAsState()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
     var showJreProgress by remember { mutableStateOf(false) }
     var termuxState by remember { mutableStateOf(TermuxState.NOT_INSTALLED) }
+    var showHealthCheck by remember { mutableStateOf(false) }
+    var healthResult by remember { mutableStateOf<HealthChecker.HealthResult?>(null) }
 
     LaunchedEffect(Unit) { termuxState = serverManager.termuxState }
 
@@ -260,12 +266,35 @@ fun HomeScreen(
             onStart = {
                 if (config.jarPath.isNotBlank()) {
                     scope.launch {
-                        serverManager.startServer(config)
+                        val result = HealthChecker.runAllChecks(config)
+                        healthResult = result
+                        if (result.passed) {
+                            serverManager.startServer(config)
+                        } else {
+                            showHealthCheck = true
+                        }
                     }
                 }
             },
             onStop = { serverManager.stopServer() }
         )
+
+        // 性能监控（仅运行时显示）
+        if (serverStatus.state == ServerState.RUNNING) {
+            PerformanceCard(metrics = perfMetrics)
+        }
+
+        // 健康检查结果弹窗
+        if (showHealthCheck && healthResult != null) {
+            HealthCheckDialog(
+                result = healthResult!!,
+                onDismiss = { showHealthCheck = false },
+                onForceStart = {
+                    showHealthCheck = false
+                    scope.launch { serverManager.startServer(config) }
+                }
+            )
+        }
 
         // 快速信息
         if (config.jarPath.isNotBlank()) {
@@ -380,4 +409,182 @@ private fun formatRemaining(seconds: Long): String {
     val m = seconds / 60; if (m < 60) return "${m}min"
     val h = m / 60; val rm = m % 60
     return if (rm > 0) "${h}h${rm}min" else "${h}h"
+}
+
+@Composable
+private fun HealthCheckDialog(
+    result: HealthChecker.HealthResult,
+    onDismiss: () -> Unit,
+    onForceStart: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                if (result.passed) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                null,
+                tint = if (result.passed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+            )
+        },
+        title = { Text(if (result.passed) "检查通过" else "启动前检查发现问题") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                result.checks.forEach { check ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (check.passed) Icons.Filled.CheckCircle else {
+                                if (check.severity == HealthChecker.Severity.ERROR) Icons.Filled.Cancel
+                                else Icons.Filled.Warning
+                            },
+                            null,
+                            Modifier.size(16.dp),
+                            tint = when {
+                                !check.passed && check.severity == HealthChecker.Severity.ERROR -> MaterialTheme.colorScheme.error
+                                !check.passed -> MaterialTheme.colorScheme.tertiary
+                                else -> MaterialTheme.colorScheme.primary
+                            }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(check.name, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
+                            Text(check.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (!result.passed) {
+                Button(
+                    onClick = onForceStart,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("仍然启动")
+                }
+            } else {
+                Button(onClick = onDismiss) { Text("确定") }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+@Composable
+private fun PerformanceCard(metrics: PerformanceMonitor.Metrics) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("性能监控", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(12.dp))
+
+            // CPU
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("CPU", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LinearProgressIndicator(
+                        progress = { metrics.cpuPercent / 100f },
+                        modifier = Modifier.width(80.dp).height(8.dp),
+                        color = when {
+                            metrics.cpuPercent > 80 -> MaterialTheme.colorScheme.error
+                            metrics.cpuPercent > 50 -> MaterialTheme.colorScheme.tertiary
+                            else -> MaterialTheme.colorScheme.primary
+                        },
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "%.1f%%".format(metrics.cpuPercent),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // 内存
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("内存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val memRatio = if (metrics.memoryTotalMB > 0) metrics.memoryUsedMB.toFloat() / metrics.memoryTotalMB else 0f
+                    LinearProgressIndicator(
+                        progress = { memRatio.coerceIn(0f, 1f) },
+                        modifier = Modifier.width(80.dp).height(8.dp),
+                        color = when {
+                            memRatio > 0.9f -> MaterialTheme.colorScheme.error
+                            memRatio > 0.7f -> MaterialTheme.colorScheme.tertiary
+                            else -> MaterialTheme.colorScheme.primary
+                        },
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "${metrics.memoryUsedMB}MB",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // TPS / MSPT
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("TPS", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        "%.1f".format(metrics.tps),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = when {
+                            metrics.tps >= 19.5f -> MaterialTheme.colorScheme.primary
+                            metrics.tps >= 15f -> MaterialTheme.colorScheme.tertiary
+                            else -> MaterialTheme.colorScheme.error
+                        }
+                    )
+                    Text(
+                        "MSPT %.1f".format(metrics.mspt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // 玩家
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("在线玩家", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "${metrics.playerCount}",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // 运行时间
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("运行时间", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    formatUptime(metrics.uptimeSeconds),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
 }

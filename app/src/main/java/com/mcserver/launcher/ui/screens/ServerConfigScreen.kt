@@ -9,6 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -102,7 +104,7 @@ fun ServerConfigScreen(
             value = name,
             onValueChange = { name = it },
             label = { Text("服务器名称") },
-            leadingIcon = { Icon(Icons.Filled.Label, contentDescription = null) },
+            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -111,7 +113,7 @@ fun ServerConfigScreen(
             value = jarPath.substringAfterLast("/").ifEmpty { jarPath },
             onValueChange = {},
             label = { Text("服务器 JAR 文件") },
-            leadingIcon = { Icon(Icons.Filled.InsertDriveFile, contentDescription = null) },
+            leadingIcon = { Icon(Icons.AutoMirrored.Filled.InsertDriveFile, contentDescription = null) },
             modifier = Modifier.fillMaxWidth(),
             readOnly = true,
             trailingIcon = {
@@ -184,8 +186,8 @@ fun ServerConfigScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GameModeSelector("游戏模式", gamemode) { gamemode = it }
-                    GameModeSelector("难度", difficulty) { difficulty = it }
+                    GameModeSelector("游戏模式", gamemode, { gamemode = it }, Modifier.weight(1f))
+                    GameModeSelector("难度", difficulty, { difficulty = it }, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -320,7 +322,8 @@ fun ServerConfigScreen(
 private fun GameModeSelector(
     label: String,
     value: String,
-    onValueChange: (String) -> Unit
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val options = if (label == "游戏模式")
         listOf("survival" to "生存", "creative" to "创造", "adventure" to "冒险", "spectator" to "观察者")
@@ -333,7 +336,7 @@ private fun GameModeSelector(
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded },
-        modifier = Modifier.weight(1f)
+        modifier = modifier
     ) {
         OutlinedTextField(
             value = current,
