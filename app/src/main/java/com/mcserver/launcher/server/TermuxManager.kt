@@ -39,6 +39,30 @@ class TermuxManager {
         const val TERMUX_USR = "$TERMUX_FILES/usr"
         const val TERMUX_BIN = "$TERMUX_USR/bin"
 
+        /**
+         * 获取 Termux bash 路径。
+         * 兼容标准安装和非标准路径（某些 ROM 可能修改了 Termux 路径）。
+         */
+        fun getTermuxBashPath(): String {
+            // 标准路径
+            val standardBash = File("$TERMUX_BIN/bash")
+            if (standardBash.exists() && standardBash.canExecute()) {
+                return standardBash.absolutePath
+            }
+            // 备用：通过 /proc/self/exe 或环境变量推断
+            val altPaths = listOf(
+                "/data/data/com.termux/files/usr/bin/bash",
+                "/data/user/0/com.termux/files/usr/bin/bash",
+                "/usr/bin/bash"
+            )
+            for (path in altPaths) {
+                val f = File(path)
+                if (f.exists() && f.canExecute()) return f.absolutePath
+            }
+            // 回退到标准路径（即使不存在，至少 Termux 安装后会出现）
+            return "$TERMUX_BIN/bash"
+        }
+
         /** 共享工作目录（应用与 Termux 都能访问） */
         fun serverDir(ctx: Context): File {
             val dir = File(Environment.getExternalStorageDirectory(), "mcserver")
@@ -50,7 +74,13 @@ class TermuxManager {
         fun isTermuxInstalled(ctx: Context): Boolean {
             return try {
                 ctx.packageManager.getPackageInfo(TERMUX_PACKAGE, 0)
-                true
+                // 进一步检查 Termux 文件目录是否存在
+                val filesDir = File(TERMUX_FILES)
+                if (!filesDir.exists()) {
+                    // 尝试备用路径
+                    val altDir = File("/data/user/0/com.termux/files")
+                    altDir.exists()
+                } else true
             } catch (_: Exception) { false }
         }
 
@@ -91,6 +121,7 @@ class TermuxManager {
 
     // ─── 环境检测 ───
 
+    /** 检查 Termux 中是否安装了 Java */
     fun checkState(): TermuxState {
         if (!isTermuxInstalled(context)) return TermuxState.NOT_INSTALLED
         val java = File("$TERMUX_BIN/java")

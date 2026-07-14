@@ -6,11 +6,15 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
 import java.io.RandomAccessFile
 
 /**
  * 性能监控器 — 实时采集 CPU、内存、TPS 等指标。
  * 借鉴 Pterodactyl 的资源监控面板设计。
+ *
+ * 改进：通过 /proc/[pid]/status 读取 Minecraft Java 进程的实际内存使用，
+ * 而非 App 自身进程内存。
  */
 class PerformanceMonitor private constructor() {
 
@@ -57,7 +61,7 @@ class PerformanceMonitor private constructor() {
 
     private fun collectMetrics(): Metrics {
         val uptime = (System.currentTimeMillis() - startTime) / 1000
-        val memInfo = collectMemoryInfo()
+        val memInfo = collectServerMemoryInfo()
         val cpu = collectCpuUsage()
         val tpsMetrics = collectTpsEstimate()
 
@@ -72,7 +76,50 @@ class PerformanceMonitor private constructor() {
         )
     }
 
-    private fun collectMemoryInfo(): Pair<Long, Long> {
+    /**
+     * 读取 Minecraft Java 进程的实际内存使用。
+     * 从 pid 文件获取进程 PID，然后读取 /proc/[pid]/status 中的 VmRSS。
+     */
+    private fun collectServerMemoryInfo(): Pair<Long, Long> {
+        try {
+            val serverDir = TermuxManager.serverDir(context)
+            val pidFile = File(serverDir, "mcserver.pid")
+            if (!pidFile.exists()) return fallbackMemoryInfo()
+
+            val pid = pidFile.readText().trim().toIntOrNull() ?: return fallbackMemoryInfo()
+
+            // 读取 /proc/[pid]/status 获取 VmRSS（物理内存）
+            val statusFile = File("/proc/$pid/status")
+            if (!statusFile.exists()) return fallbackMemoryInfo()
+
+            val statusLines = statusFile.readLines()
+            val vmRss = statusLines
+                .firstOrNull { it.startsWith("VmRSS:") }
+                ?.substringAfter(":")
+                ?.trim()
+                ?.replace("kB", "")
+                ?.trim()
+                ?.toLongOrNull() ?: return fallbackMemoryInfo()
+
+            // 也读取 VmSize（虚拟内存）作为总量参考
+            val vmSize = statusLines
+                .firstOrNull { it.startsWith("VmSize:") }
+                ?.substringAfter(":")
+                ?.trim()
+                ?.replace("kB", "")
+                ?.trim()
+                ?.toLongOrNull() ?: (vmRss * 2)
+
+            val usedMB = vmRss / 1024
+            val totalMB = vmSize / 1024
+
+            return usedMB to totalMB
+        } catch (_: Exception) {
+            return fallbackMemoryInfo()
+        }
+    }
+
+    private fun fallbackMemoryInfo(): Pair<Long, Long> {
         val runtime = Runtime.getRuntime()
         val usedMB = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
         val totalMB = runtime.maxMemory() / (1024 * 1024)
@@ -122,13 +169,10 @@ class PerformanceMonitor private constructor() {
      * TPS 估算 — 从最近的日志行分析 "Done" 耗时。
      * 这只是一个粗略估算，真实 TPS 需要从服务器内部获取。
      */
-    private var lastTpsCheck = 0L
     private var estimatedTps = 20f
     private var estimatedMspt = 50f
 
     private fun collectTpsEstimate(): Pair<Float, Float> {
-        // 在没有原生 TPS 数据的情况下，保持默认值
-        // 后续可以从 /server health 命令或 Spark 插件获取
         return estimatedTps to estimatedMspt
     }
 

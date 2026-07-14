@@ -21,6 +21,7 @@ import com.mcserver.launcher.ui.navigation.bottomNavItems
 import com.mcserver.launcher.ui.screens.*
 import com.mcserver.launcher.ui.theme.McServerTheme
 import com.mcserver.launcher.ui.theme.ThemeMode
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -33,13 +34,32 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by prefsManager.themeMode.collectAsState(initial = ThemeMode.DARK)
             val config by prefsManager.serverConfig.collectAsState(initial = ServerConfig())
+            val setupCompleted by prefsManager.setupCompleted.collectAsState(initial = false)
 
             McServerTheme(themeMode = themeMode) {
-                MainApp(
-                    themeMode = themeMode,
-                    config = config,
-                    prefsManager = prefsManager
-                )
+                if (!setupCompleted) {
+                    // 首次启动：显示设置向导
+                    SetupWizardScreen(
+                        config = config,
+                        onComplete = { updatedConfig ->
+                            // 保存配置并标记向导完成
+                            kotlinx.coroutines.MainScope().launch {
+                                prefsManager.saveServerConfig(updatedConfig)
+                                prefsManager.setSetupCompleted()
+                            }
+                        },
+                        onNavigateToCoreDownload = {
+                            // 向导中跳转到核心下载页（暂不支持嵌套导航，提示用户在后续使用）
+                            // 向导完成后用户可在「管理 → 下载核心」中使用
+                        }
+                    )
+                } else {
+                    MainApp(
+                        themeMode = themeMode,
+                        config = config,
+                        prefsManager = prefsManager
+                    )
+                }
             }
         }
     }

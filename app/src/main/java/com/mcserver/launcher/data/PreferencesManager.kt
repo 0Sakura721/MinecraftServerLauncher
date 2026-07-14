@@ -14,6 +14,7 @@ class PreferencesManager(private val context: Context) {
 
     companion object {
         private val KEY_THEME = stringPreferencesKey("theme_mode")
+        private val KEY_SETUP_COMPLETED = booleanPreferencesKey("setup_completed")
         private val KEY_SERVER_NAME = stringPreferencesKey("server_name")
         private val KEY_JAR_PATH = stringPreferencesKey("jar_path")
         private val KEY_ALLOCATED_MEMORY = intPreferencesKey("allocated_memory_mb")
@@ -42,6 +43,10 @@ class PreferencesManager(private val context: Context) {
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
         ThemeMode.fromKey(prefs[KEY_THEME] ?: "dark")
+    }
+
+    val setupCompleted: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SETUP_COMPLETED] ?: false
     }
 
     val serverConfig: Flow<ServerConfig> = context.dataStore.data.map { prefs ->
@@ -74,6 +79,10 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setTheme(mode: ThemeMode) {
         context.dataStore.edit { prefs -> prefs[KEY_THEME] = mode.key }
+    }
+
+    suspend fun setSetupCompleted() {
+        context.dataStore.edit { prefs -> prefs[KEY_SETUP_COMPLETED] = true }
     }
 
     suspend fun saveServerConfig(config: ServerConfig) {

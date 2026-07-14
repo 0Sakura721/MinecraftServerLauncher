@@ -12,6 +12,8 @@ import androidx.core.app.NotificationCompat
 import com.mcserver.launcher.MainActivity
 import com.mcserver.launcher.McApplication
 import com.mcserver.launcher.R
+import com.mcserver.launcher.data.ServerState
+import kotlinx.coroutines.*
 
 class ServerForegroundService : Service() {
 
@@ -20,11 +22,15 @@ class ServerForegroundService : Service() {
         const val ACTION_SEND_COMMAND = "com.mcserver.launcher.action.SEND_COMMAND"
         const val EXTRA_COMMAND = "com.mcserver.launcher.extra.COMMAND"
         const val NOTIFICATION_ID = 1001
+
         /** 标记本前台服务是否存活，供命令转发判断（避免后台启动 Service 限制） */
         @Volatile
         var isRunning = false
             private set
     }
+
+    private var updateJob: Job? = null
+    private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     /** 接收来自控制台（应用切到后台时）的命令，转发到服务器命名管道 */
     private val commandReceiver = object : BroadcastReceiver() {
@@ -55,45 +61,96 @@ class ServerForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                // 停止动作统一交给 ServerManager.stopServer()，避免与 onDestroy 重复。
-                // 仅移除通知并结束本服务，停止服务器的回调由 TermuxManager 完成。
                 isRunning = false
                 ServerManager.instance.stopServer()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
+                return START_NOT_STICKY
             }
         }
 
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        // 启动通知更新循环（每 5 秒更新一次通知内容）
+        startNotificationUpdates()
 
-        val stopIntent = PendingIntent.getService(
-            this, 0,
-            Intent(this, ServerForegroundService::class.java).apply { action = ACTION_STOP },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(this, McApplication.CHANNEL_SERVER)
-            .setContentTitle("Minecraft 服务器运行中")
-            .setContentText("服务器正在后台运行")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentIntent(pendingIntent)
-            .addAction(android.R.drawable.ic_media_pause, "停止", stopIntent)
-            .setOngoing(true)
-            .build()
-
-        startForeground(NOTIFICATION_ID, notification)
         return START_STICKY
+    }
+
+    private fun startNotificationUpdates() {
+        updateJob?.cancel()
+        updateJob = serviceScope.launch {
+            while (isActive && isRunning) {
+                updateNotification()
+                delay(5000)
+            }
+        }
+    }
+
+    private fun updateNotification() {
+        try {
+            val serverManager = ServerManager.instance
+            val status = serverManager.serverStatus.value
+            val metrics = PerformanceMonitor.instance.metrics.value
+
+            val pendingIntent = PendingIntent.getActivity(
+                this, 0,
+                Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val stopIntent = PendingIntent.getService(
+                this, 0,
+                Intent(this, ServerForegroundService::class.java).apply { action = ACTION_STOP },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            // 构建通知内容：显示内存、玩家、运行时间
+            val contentText = buildString {
+                append("内存: ${metrics.memoryUsedMB}MB")
+                append(" | 玩家: ${metrics.playerCount}")
+                if (status.uptimeSeconds > 0) {
+                    append(" | 运行: ${formatNotificationUptime(status.uptimeSeconds)}")
+                }
+                if (metrics.tps > 0 && metrics.tps < 20f) {
+                    append(" | TPS: ${"%.1f".format(metrics.tps)}")
+                }
+            }
+
+            val titleText = when (status.state) {
+                ServerState.RUNNING -> "Minecraft 服务器运行中"
+                ServerState.STARTING -> "服务器正在启动..."
+                ServerState.STOPPING -> "服务器正在停止..."
+                else -> "Minecraft 服务器"
+            }
+
+            val notification = NotificationCompat.Builder(this, McApplication.CHANNEL_SERVER)
+                .setContentTitle(titleText)
+                .setContentText(contentText)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentIntent(pendingIntent)
+                .addAction(android.R.drawable.ic_media_pause, "停止", stopIntent)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true) // 避免频繁更新发出声音
+                .build()
+
+            val manager = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+            manager.notify(NOTIFICATION_ID, notification)
+        } catch (_: Exception) {}
+    }
+
+    private fun formatNotificationUptime(seconds: Long): String {
+        val h = seconds / 3600
+        val m = (seconds % 3600) / 60
+        return when {
+            h > 0 -> "${h}h${m}m"
+            m > 0 -> "${m}m"
+            else -> "${seconds}s"
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        updateJob?.cancel()
         try { unregisterReceiver(commandReceiver) } catch (_: Exception) {}
-        // 停止动作已在 ACTION_STOP 路径（或 UI 直接调用 ServerManager.stopServer）处理，
-        // 此处不再重复，仅清理资源，避免双重停止导致状态混乱。
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -28,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -381,18 +383,54 @@ private fun MemoryAllocationCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+
+            // 预设内存选项
+            val deviceMax = memoryInfo.totalMB.toInt()
+            val presets = listOf(
+                512 to "512M", 1024 to "1G", 1536 to "1.5G",
+                2048 to "2G", 3072 to "3G", 4096 to "4G",
+                6144 to "6G", 8192 to "8G"
+            ).filter { it.first <= deviceMax }
+
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                presets.forEach { (mb, label) ->
+                    FilterChip(
+                        selected = allocatedMemory == mb,
+                        onClick = { onMemoryChange(mb) },
+                        label = {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (allocatedMemory == mb) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                val step = when {
+                    allocatedMemory < 1024 -> 128
+                    allocatedMemory < 2048 -> 256
+                    else -> 512
+                }
                 Slider(
                     value = allocatedMemory.toFloat(),
-                    onValueChange = { onMemoryChange(it.toInt()) },
-                    valueRange = 256f..memoryInfo.totalMB.toFloat().coerceAtLeast(1024f),
-                    steps = 0,
+                    onValueChange = {
+                        val snapped = (it / step).roundToInt() * step
+                        onMemoryChange(snapped.coerceIn(256, deviceMax))
+                    },
+                    valueRange = 256f..deviceMax.toFloat().coerceAtLeast(1024f),
                     modifier = Modifier.weight(1f)
                 )
                 Surface(
@@ -405,19 +443,20 @@ private fun MemoryAllocationCard(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         IconButton(
-                            onClick = { onMemoryChange((allocatedMemory - 256).coerceAtLeast(256)) },
+                            onClick = { onMemoryChange((allocatedMemory - step).coerceAtLeast(256)) },
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(Icons.Filled.ChevronLeft, "减少", Modifier.size(16.dp))
                         }
                         Text(
-                            "${allocatedMemory}MB",
+                            if (allocatedMemory >= 1024) "%.1fG".format(allocatedMemory / 1024f)
+                            else "${allocatedMemory}MB",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.widthIn(min = 72.dp)
+                            modifier = Modifier.widthIn(min = 60.dp)
                         )
                         IconButton(
-                            onClick = { onMemoryChange((allocatedMemory + 256).coerceAtMost(memoryInfo.totalMB.toInt())) },
+                            onClick = { onMemoryChange((allocatedMemory + step).coerceAtMost(deviceMax)) },
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(Icons.Filled.ChevronRight, "增加", Modifier.size(16.dp))
