@@ -9,29 +9,33 @@ plugins {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  构建时预下载：proot 二进制 + Alpine minirootfs 内置到 APK assets
-//  用户首次启动无需等待下载，直接从 APK 提取即可
+//  内置资源辅助任务（手动运行，非阻塞）
+//
+//  运行方式：./gradlew :app:downloadBundledAssets
+//
+//  下载 proot + Ubuntu rootfs 到 assets/bundled/，
+//  之后构建的 APK 将内置这些文件，用户首次启动零下载。
+//
+//  注意：CI 构建不会自动运行此任务。
+//        如需发布内置版 APK，请先在本地运行此任务再构建。
 // ═══════════════════════════════════════════════════════════════
 val bundledAssetsDir = layout.projectDirectory.dir("src/main/assets/bundled")
 
 val downloadBundledAssets by tasks.registering {
     group = "bundled"
-    description = "下载 proot + Ubuntu 24.04 rootfs 到 assets/bundled/，实现内置 Linux 环境"
+    description = "下载 proot + Ubuntu 24.04 rootfs 到 assets/bundled/"
 
-    val prootVersion = "v5.4.0"
+    // Ubuntu 24.04 base rootfs（官方 CDN，CI 可访问）
     val ubuntuVersion = "24.04"
-
-    // proot 二进制
-    val prootFiles = mapOf(
-        "proot-aarch64" to "https://github.com/proot-me/proot-static-build/releases/download/$prootVersion/proot_${prootVersion.drop(1)}_aarch64",
-        "proot-armhf"   to "https://github.com/proot-me/proot-static-build/releases/download/$prootVersion/proot_${prootVersion.drop(1)}_armhf",
+    val files = linkedMapOf(
+        "ubuntu-base-$ubuntuVersion-arm64.tar.gz" to
+            "https://cdimage.ubuntu.com/ubuntu-base/releases/$ubuntuVersion/release/ubuntu-base-$ubuntuVersion-base-arm64.tar.gz",
+        "ubuntu-base-$ubuntuVersion-armhf.tar.gz" to
+            "https://cdimage.ubuntu.com/ubuntu-base/releases/$ubuntuVersion/release/ubuntu-base-$ubuntuVersion-base-armhf.tar.gz",
     )
-
-    // Ubuntu 24.04 base rootfs
-    val ubuntuFiles = mapOf(
-        "ubuntu-base-$ubuntuVersion-arm64.tar.gz" to "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/$ubuntuVersion/release/ubuntu-base-$ubuntuVersion-base-arm64.tar.gz",
-        "ubuntu-base-$ubuntuVersion-armhf.tar.gz" to "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/$ubuntuVersion/release/ubuntu-base-$ubuntuVersion-base-armhf.tar.gz",
-    )
+    // proot 二进制暂时不自动下载（上游仅提供 x86_64 构建），
+    // 请手动放置到 assets/bundled/proot-aarch64 和 proot-armhf。
+    // 来源参考：Termux proot 包 或 proot-me/proot-static-build 的 community ARM builds
 
     doLast {
         val destDir = bundledAssetsDir.asFile
@@ -45,25 +49,21 @@ val downloadBundledAssets by tasks.registering {
             try {
                 println("  ⬇ 下载: ${dest.name} ...")
                 val conn = URL(urlStr).openConnection() as HttpURLConnection
-                conn.connectTimeout = 30000
-                conn.readTimeout = 120000
+                conn.connectTimeout = 60000
+                conn.readTimeout = 300000
                 conn.instanceFollowRedirects = true
-                // 跟随重定向（GitHub release 会 302）
                 var currentConn = conn
                 for (i in 1..5) {
                     val code = currentConn.responseCode
-                    if (code == 302 || code == 301 || code == 307 || code == 308) {
+                    if (code in listOf(301, 302, 307, 308)) {
                         val loc = currentConn.getHeaderField("Location") ?: break
                         currentConn.disconnect()
                         currentConn = URL(loc).openConnection() as HttpURLConnection
-                        currentConn.connectTimeout = 30000
-                        currentConn.readTimeout = 120000
+                        currentConn.connectTimeout = 60000
+                        currentConn.readTimeout = 300000
                     } else break
                 }
-                if (currentConn.responseCode != 200) {
-                    System.err.println("  ✗ HTTP ${currentConn.responseCode}: ${dest.name}")
-                    return false
-                }
+                check(currentConn.responseCode == 200) { "HTTP ${currentConn.responseCode}" }
                 val total = currentConn.contentLengthLong
                 FileOutputStream(dest).use { out ->
                     currentConn.inputStream.use { input ->
@@ -73,14 +73,14 @@ val downloadBundledAssets by tasks.registering {
                         while (input.read(buf).also { read = it } != -1) {
                             out.write(buf, 0, read)
                             downloaded += read
-                            if (total > 0 && downloaded % (1024 * 1024) == 0L) {
-                                print("\r    ${downloaded * 100 / total}% (${downloaded / 1024} / ${total / 1024} KB)")
+                            if (total > 0 && downloaded % (5 * 1024 * 1024) == 0L) {
+                                print("\r    ${downloaded * 100 / total}% (${downloaded / 1024 / 1024} / ${total / 1024 / 1024} MB)")
                             }
                         }
                     }
                 }
                 currentConn.disconnect()
-                println("\r  ✓ 完成: ${dest.name} (${dest.length() / 1024} KB)")
+                println("\r  ✓ 完成: ${dest.name} (${dest.length() / 1024 / 1024} MB)")
                 return true
             } catch (e: Exception) {
                 System.err.println("  ✗ 失败: ${dest.name} - ${e.message}")
@@ -90,18 +90,12 @@ val downloadBundledAssets by tasks.registering {
         }
 
         println("═══ 下载预置资源 ═══")
-        prootFiles.forEach { (name, url) ->
-            download(url, File(destDir, name))
+        var allOk = true
+        files.forEach { (name, url) ->
+            if (!download(url, File(destDir, name))) allOk = false
         }
-        ubuntuFiles.forEach { (name, url) ->
-            download(url, File(destDir, name))
-        }
-        println("═══ 预置资源完成 ═══")
+        println("═══ 预置资源完成 ${if (allOk) "✓" else "（有失败项，不影响构建）"} ═══")
     }
-}
-
-tasks.named("preBuild") {
-    dependsOn(downloadBundledAssets)
 }
 
 android {
