@@ -6,3 +6,5 @@ local.properties
 .idea/
 *.aapt2.real
 *.aapt2.wrapper
+# 构建时下载的内置资源（不应提交到 Git）
+app/src/main/assets/bundled/

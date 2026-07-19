@@ -141,6 +141,26 @@ object LinuxEnvironmentManager {
 
     private val archName: String get() = if (isAarch64) "aarch64" else "armhf"
 
+    // ── 内置资源提取 ──
+    /**
+     * 尝试从 APK assets/bundled 提取文件到目标路径。
+     * @return true 表示提取成功，false 表示资源不存在
+     */
+    private fun extractBundledAsset(assetName: String, dest: File): Boolean {
+        if (dest.exists() && dest.length() > 0) return true // 已存在
+        return try {
+            dest.parentFile?.mkdirs()
+            context.assets.open("bundled/$assetName").use { input ->
+                FileOutputStream(dest).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     // ── 环境检查 ──
     fun isEnvironmentReady(): Boolean {
         return prootBinary.exists() && prootBinary.canExecute() &&
@@ -186,56 +206,75 @@ object LinuxEnvironmentManager {
             _downloadItems.value = items
 
             // ── Step 1: proot 二进制 ──
-            log(">>> 阶段 1/6：测速并下载 proot 二进制（$archName）")
-            val prootMirrors = if (isAarch64) MirrorSpeedTester.PROOT_MIRRORS_AARCH64
-                               else MirrorSpeedTester.PROOT_MIRRORS_ARMHF
-            _isTestingMirrors.value = true
-            log("  正在测速 ${prootMirrors.size} 个镜像源...")
-            val prootResults = MirrorSpeedTester.testMirrors(prootMirrors)
-            _mirrorResults.value = prootResults
-            _isTestingMirrors.value = false
-            val bestProot = prootResults.firstOrNull { it.error == null }
-            if (bestProot != null) {
-                log("  ✓ 最优: ${bestProot.name} (${bestProot.latencyMs}ms)")
+            log(">>> 阶段 1/6：获取 proot 二进制（$archName）")
+            val prootAssetName = "proot-$archName"
+            if (extractBundledAsset(prootAssetName, prootBinary)) {
+                log("  ✓ 从内置资源提取 proot（无需下载）")
+                updateItem("proot", DownloadItemState.COMPLETED)
             } else {
-                log("  ⚠ 所有镜像超时，回退到 GitHub 官方")
-            }
-            val prootUrl = bestProot?.url ?: prootMirrors.first().url
-            updateItem("proot", DownloadItemState.DOWNLOADING)
-            downloadFile(prootUrl, prootBinary) { progress, downloaded, total, speed ->
-                updateProgress("proot", progress, downloaded, total, speed)
+                // 回退到网络下载
+                log("  内置资源不可用，从网络下载...")
+                val prootMirrors = if (isAarch64) MirrorSpeedTester.PROOT_MIRRORS_AARCH64
+                                    else MirrorSpeedTester.PROOT_MIRRORS_ARMHF
+                _isTestingMirrors.value = true
+                log("  正在测速 ${prootMirrors.size} 个镜像源...")
+                val prootResults = MirrorSpeedTester.testMirrors(prootMirrors)
+                _mirrorResults.value = prootResults
+                _isTestingMirrors.value = false
+                val bestProot = prootResults.firstOrNull { it.error == null }
+                if (bestProot != null) {
+                    log("  ✓ 最优: ${bestProot.name} (${bestProot.latencyMs}ms)")
+                } else {
+                    log("  ⚠ 所有镜像超时，回退到 GitHub 官方")
+                }
+                val prootUrl = bestProot?.url ?: prootMirrors.first().url
+                updateItem("proot", DownloadItemState.DOWNLOADING)
+                downloadFile(prootUrl, prootBinary) { progress, downloaded, total, speed ->
+                    updateProgress("proot", progress, downloaded, total, speed)
+                }
+                updateItem("proot", DownloadItemState.COMPLETED)
             }
             prootBinary.setExecutable(true)
-            updateItem("proot", DownloadItemState.COMPLETED)
             log("  ✓ proot 就绪")
 
             // ── Step 2: Alpine rootfs ──
-            log(">>> 阶段 2/6：测速并下载 Alpine rootfs（$archName）")
-            val alpineMirrors = if (isAarch64) MirrorSpeedTester.ALPINE_ROOTFS_MIRRORS_AARCH64
-                                else MirrorSpeedTester.ALPINE_ROOTFS_MIRRORS_ARMHF
-            _isTestingMirrors.value = true
-            log("  正在测速 ${alpineMirrors.size} 个镜像源...")
-            val alpineResults = MirrorSpeedTester.testMirrors(alpineMirrors)
-            _mirrorResults.value = alpineResults
-            _isTestingMirrors.value = false
-            val bestAlpine = alpineResults.firstOrNull { it.error == null }
-            if (bestAlpine != null) {
-                log("  ✓ 最优: ${bestAlpine.name} (${bestAlpine.latencyMs}ms)")
-            } else {
-                log("  ⚠ 所有镜像超时，回退到 Alpine CDN")
-            }
-            updateItem("rootfs", DownloadItemState.DOWNLOADING)
+            log(">>> 阶段 2/6：获取 Alpine rootfs（$archName）")
+            val rootfsAssetName = "alpine-minirootfs-3.21.0-$archName.tar.gz"
             val rootfsTarball = File(linuxDir, "rootfs.tar.gz")
-            val rootfsUrl = bestAlpine?.url ?: alpineMirrors.first().url
-            downloadFile(rootfsUrl, rootfsTarball) { progress, downloaded, total, speed ->
-                updateProgress("rootfs", progress, downloaded, total, speed)
+            if (extractBundledAsset(rootfsAssetName, rootfsTarball)) {
+                log("  ✓ 从内置资源提取 Alpine rootfs（无需下载）")
+                updateItem("rootfs", DownloadItemState.COMPLETED)
+            } else {
+                // 回退到网络下载
+                log("  内置资源不可用，从网络下载...")
+                val alpineMirrors = if (isAarch64) MirrorSpeedTester.ALPINE_ROOTFS_MIRRORS_AARCH64
+                                    else MirrorSpeedTester.ALPINE_ROOTFS_MIRRORS_ARMHF
+                _isTestingMirrors.value = true
+                log("  正在测速 ${alpineMirrors.size} 个镜像源...")
+                val alpineResults = MirrorSpeedTester.testMirrors(alpineMirrors)
+                _mirrorResults.value = alpineResults
+                _isTestingMirrors.value = false
+                val bestAlpine = alpineResults.firstOrNull { it.error == null }
+                if (bestAlpine != null) {
+                    log("  ✓ 最优: ${bestAlpine.name} (${bestAlpine.latencyMs}ms)")
+                } else {
+                    log("  ⚠ 所有镜像超时，回退到 Alpine CDN")
+                }
+                updateItem("rootfs", DownloadItemState.DOWNLOADING)
+                val rootfsUrl = bestAlpine?.url ?: alpineMirrors.first().url
+                downloadFile(rootfsUrl, rootfsTarball) { progress, downloaded, total, speed ->
+                    updateProgress("rootfs", progress, downloaded, total, speed)
+                }
+                updateItem("rootfs", DownloadItemState.COMPLETED)
             }
-            updateItem("rootfs", DownloadItemState.EXTRACTING)
-            log("  解压 rootfs...")
-            extractTarGz(rootfsTarball, rootfsDir)
+            // 解压 rootfs（无论来源）
+            if (!File(rootfsDir, "bin/sh").exists()) {
+                updateItem("rootfs", DownloadItemState.EXTRACTING)
+                log("  解压 rootfs...")
+                extractTarGz(rootfsTarball, rootfsDir)
+                log("  ✓ Alpine rootfs 就绪")
+            }
             rootfsTarball.delete()
-            updateItem("rootfs", DownloadItemState.COMPLETED)
-            log("  ✓ Alpine rootfs 就绪")
 
             // ── Step 3: 初始化 Alpine 包管理器 ──
             log(">>> 阶段 3/6：初始化包管理器")
