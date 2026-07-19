@@ -42,7 +42,7 @@ data class MirrorProxy(
  * 通用镜像测速工具。
  *
  * 支持 35+ 个 GitHub 镜像代理源，可对任意 GitHub 文件 URL 自动生成全部镜像。
- * 也提供预设的 Alpine rootfs 镜像站列表。
+ * 也提供预设的 Ubuntu 24.04 rootfs 镜像站列表。
  */
 object MirrorSpeedTester {
 
@@ -156,25 +156,23 @@ object MirrorSpeedTester {
     }
 
     // ════════════════════════════════════════════════════════════
-    //  Alpine rootfs 镜像站（原生，非 GitHub 代理）
+    //  Ubuntu 24.04 rootfs 镜像站
     // ════════════════════════════════════════════════════════════
 
-    /** Alpine aarch64 rootfs 多源镜像 */
-    val ALPINE_ROOTFS_MIRRORS_AARCH64 = listOf(
-        MirrorOption("alpinecdn", "Alpine CDN", "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.0-aarch64.tar.gz", "EU"),
-        MirrorOption("tuna", "清华镜像", "https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.0-aarch64.tar.gz", "CN"),
-        MirrorOption("ustc", "中科大镜像", "https://mirrors.ustc.edu.cn/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.0-aarch64.tar.gz", "CN"),
-        MirrorOption("aliyun", "阿里云镜像", "https://mirrors.aliyun.com/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.0-aarch64.tar.gz", "CN"),
-        MirrorOption("sjtu", "上交镜像", "https://mirror.sjtu.edu.cn/alpine/v3.21/releases/aarch64/alpine-minirootfs-3.21.0-aarch64.tar.gz", "CN"),
+    /** Ubuntu 24.04 aarch64 rootfs 多源镜像 */
+    val UBUNTU_ROOTFS_MIRRORS_AARCH64 = listOf(
+        MirrorOption("ubuntu", "Ubuntu 官方", "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-arm64.tar.gz", "EU"),
+        MirrorOption("tuna", "清华镜像", "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-arm64.tar.gz", "CN"),
+        MirrorOption("ustc", "中科大镜像", "https://mirrors.ustc.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-arm64.tar.gz", "CN"),
+        MirrorOption("aliyun", "阿里云镜像", "https://mirrors.aliyun.com/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-arm64.tar.gz", "CN"),
     )
 
-    /** Alpine armhf rootfs 多源镜像 */
-    val ALPINE_ROOTFS_MIRRORS_ARMHF = listOf(
-        MirrorOption("alpinecdn", "Alpine CDN", "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/armhf/alpine-minirootfs-3.21.0-armhf.tar.gz", "EU"),
-        MirrorOption("tuna", "清华镜像", "https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.21/releases/armhf/alpine-minirootfs-3.21.0-armhf.tar.gz", "CN"),
-        MirrorOption("ustc", "中科大镜像", "https://mirrors.ustc.edu.cn/alpine/v3.21/releases/armhf/alpine-minirootfs-3.21.0-armhf.tar.gz", "CN"),
-        MirrorOption("aliyun", "阿里云镜像", "https://mirrors.aliyun.com/alpine/v3.21/releases/armhf/alpine-minirootfs-3.21.0-armhf.tar.gz", "CN"),
-        MirrorOption("sjtu", "上交镜像", "https://mirror.sjtu.edu.cn/alpine/v3.21/releases/armhf/alpine-minirootfs-3.21.0-armhf.tar.gz", "CN"),
+    /** Ubuntu 24.04 armhf rootfs 多源镜像 */
+    val UBUNTU_ROOTFS_MIRRORS_ARMHF = listOf(
+        MirrorOption("ubuntu", "Ubuntu 官方", "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-armhf.tar.gz", "EU"),
+        MirrorOption("tuna", "清华镜像", "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-armhf.tar.gz", "CN"),
+        MirrorOption("ustc", "中科大镜像", "https://mirrors.ustc.edu.cn/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-armhf.tar.gz", "CN"),
+        MirrorOption("aliyun", "阿里云镜像", "https://mirrors.aliyun.com/ubuntu-cdimage/ubuntu-base/releases/24.04/release/ubuntu-base-24.04-base-armhf.tar.gz", "CN"),
     )
 
     // ════════════════════════════════════════════════════════════

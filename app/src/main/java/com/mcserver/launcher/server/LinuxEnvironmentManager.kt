@@ -57,19 +57,24 @@ data class DownloadItem(
 )
 
 /**
- * Linux 环境管理器 — 自包含 proot + Alpine Linux
+ * Linux 环境管理器 — proot + Ubuntu 24.04（内置）
  *
  * 下载清单（顺序）：
- *   1. proot 二进制（~1.2 MB）
- *   2. Alpine minirootfs（~5 MB）
- *   3. JDK 8（~82 MB）
- *   4. JDK 11（~84 MB）
- *   5. JDK 17（~90 MB）
- *   6. JDK 21（~92 MB）
+ *   1. proot 二进制（~1.2 MB）— APK 内置，无需网络
+ *   2. Ubuntu 24.04 base rootfs（~30 MB 压缩）— APK 内置，无需网络
+ *   3. JDK 8（~80 MB）— 通过 apt 网络安装
+ *   4. JDK 11（~82 MB）
+ *   5. JDK 17（~88 MB）
+ *   6. JDK 21（~90 MB）
  *
  * 架构支持：
  *   - arm64-v8a（aarch64）
  *   - armeabi-v7a（armhf）
+ *
+ * 为什么是 Ubuntu 而不是 Alpine：
+ *   - glibc 兼容性（Alpine 用 musl，某些 Java 库可能不兼容）
+ *   - apt 生态更完整，Minecraft server 社区主流
+ *   - Operit 同款方案（proot + Ubuntu）
  */
 object LinuxEnvironmentManager {
 
@@ -78,14 +83,14 @@ object LinuxEnvironmentManager {
     // ── 下载源（多源 + 自动测速） ──
     // 镜像源由 MirrorSpeedTester 预定义，下载前自动测速选择最优
 
-    /** JDK 版本列表 — Alpine 包名 */
-    data class JdkVersion(val version: Int, val alpinePackage: String, val label: String) {
+    /** JDK 版本列表 — Ubuntu apt 包名 */
+    data class JdkVersion(val version: Int, val aptPackage: String, val label: String) {
         companion object {
             val ALL = listOf(
-                JdkVersion(8, "openjdk8", "Java 8"),
-                JdkVersion(11, "openjdk11", "Java 11"),
-                JdkVersion(17, "openjdk17", "Java 17"),
-                JdkVersion(21, "openjdk21", "Java 21")
+                JdkVersion(8,  "openjdk-8-jdk-headless",  "Java 8"),
+                JdkVersion(11, "openjdk-11-jdk-headless", "Java 11"),
+                JdkVersion(17, "openjdk-17-jdk-headless", "Java 17"),
+                JdkVersion(21, "openjdk-21-jdk-headless", "Java 21")
             )
             fun forVersion(v: Int) = ALL.firstOrNull { it.version == v }
         }
@@ -123,8 +128,10 @@ object LinuxEnvironmentManager {
     private val prootBinary: File get() = File(linuxDir, "proot")
     /** rootfs 目录 */
     val rootfsDir: File get() = File(linuxDir, "rootfs")
-    /** Alpine 内 Java 根目录 */
+    /** Ubuntu 内 Java 根目录 */
     val javaHomeDir: File get() = File(rootfsDir, "usr/lib/jvm")
+    /** Ubuntu JDK 路径的架构后缀（arm64 / armhf） */
+    private val jdkArchSuffix: String get() = if (isAarch64) "arm64" else "armhf"
     /** 服务器工作目录（外部共享） */
     val serverDir: File
         get() {
@@ -168,25 +175,20 @@ object LinuxEnvironmentManager {
     }
 
     fun isJdkInstalled(version: Int): Boolean {
-        val javaPath = File(javaHomeDir, "java-$version-openjdk")
-        val javaBin = when {
-            isAarch64 -> File(javaPath, "bin/java")
-            else -> File(javaPath, "bin/java")
-        }
+        // Ubuntu 安装后路径如 /usr/lib/jvm/java-17-openjdk-arm64/bin/java
+        val javaDir = File(javaHomeDir, "java-$version-openjdk-$jdkArchSuffix")
+        val javaBin = File(javaDir, "bin/java")
         return javaBin.exists() && javaBin.canExecute()
     }
 
     fun getJavaPath(version: Int): String {
-        val suffix = when (version) {
-            8 -> "default-jvm"
-            else -> "java-$version-openjdk"
-        }
+        val suffix = "java-$version-openjdk-$jdkArchSuffix"
         val candidate = File(javaHomeDir, suffix)
         if (candidate.exists()) return "/usr/lib/jvm/$suffix/bin/java"
-        // JDK 8 某些情况下用不同路径
-        val alt8 = File(javaHomeDir, "java-1.8-openjdk")
-        if (version == 8 && alt8.exists()) return "/usr/lib/jvm/java-1.8-openjdk/bin/java"
-        return "/usr/lib/jvm/java-$version-openjdk/bin/java"
+        // 回退：某些 Ubuntu 版本无架构后缀
+        val fallback = File(javaHomeDir, "java-$version-openjdk")
+        if (fallback.exists()) return "/usr/lib/jvm/java-$version-openjdk/bin/java"
+        return "/usr/lib/jvm/$suffix/bin/java"
     }
 
     // ── 全自动初始化 ──
@@ -197,7 +199,7 @@ object LinuxEnvironmentManager {
         try {
             val items = mutableListOf(
                 DownloadItem("proot", "proot 运行时", "Linux 进程模拟器"),
-                DownloadItem("rootfs", "Alpine Linux", "轻量级 Linux 根文件系统"),
+                DownloadItem("rootfs", "Ubuntu 24.04", "完整 glibc Linux 根文件系统"),
                 DownloadItem("jdk8", "Java 8", "Minecraft 1.8-1.12"),
                 DownloadItem("jdk11", "Java 11", "Minecraft 1.13-1.16"),
                 DownloadItem("jdk17", "Java 17", "Minecraft 1.17-1.20.4"),
@@ -237,31 +239,32 @@ object LinuxEnvironmentManager {
             prootBinary.setExecutable(true)
             log("  ✓ proot 就绪")
 
-            // ── Step 2: Alpine rootfs ──
-            log(">>> 阶段 2/6：获取 Alpine rootfs（$archName）")
-            val rootfsAssetName = "alpine-minirootfs-3.21.0-$archName.tar.gz"
+            // ── Step 2: Ubuntu rootfs ──
+            log(">>> 阶段 2/6：获取 Ubuntu 24.04 rootfs（$archName）")
+            val ubuntuArch = if (isAarch64) "arm64" else "armhf"
+            val rootfsAssetName = "ubuntu-base-24.04-$ubuntuArch.tar.gz"
             val rootfsTarball = File(linuxDir, "rootfs.tar.gz")
             if (extractBundledAsset(rootfsAssetName, rootfsTarball)) {
-                log("  ✓ 从内置资源提取 Alpine rootfs（无需下载）")
+                log("  ✓ 从内置资源提取 Ubuntu rootfs（无需下载）")
                 updateItem("rootfs", DownloadItemState.COMPLETED)
             } else {
                 // 回退到网络下载
                 log("  内置资源不可用，从网络下载...")
-                val alpineMirrors = if (isAarch64) MirrorSpeedTester.ALPINE_ROOTFS_MIRRORS_AARCH64
-                                    else MirrorSpeedTester.ALPINE_ROOTFS_MIRRORS_ARMHF
+                val ubuntuMirrors = if (isAarch64) MirrorSpeedTester.UBUNTU_ROOTFS_MIRRORS_AARCH64
+                                    else MirrorSpeedTester.UBUNTU_ROOTFS_MIRRORS_ARMHF
                 _isTestingMirrors.value = true
-                log("  正在测速 ${alpineMirrors.size} 个镜像源...")
-                val alpineResults = MirrorSpeedTester.testMirrors(alpineMirrors)
-                _mirrorResults.value = alpineResults
+                log("  正在测速 ${ubuntuMirrors.size} 个镜像源...")
+                val ubuntuResults = MirrorSpeedTester.testMirrors(ubuntuMirrors)
+                _mirrorResults.value = ubuntuResults
                 _isTestingMirrors.value = false
-                val bestAlpine = alpineResults.firstOrNull { it.error == null }
-                if (bestAlpine != null) {
-                    log("  ✓ 最优: ${bestAlpine.name} (${bestAlpine.latencyMs}ms)")
+                val bestUbuntu = ubuntuResults.firstOrNull { it.error == null }
+                if (bestUbuntu != null) {
+                    log("  ✓ 最优: ${bestUbuntu.name} (${bestUbuntu.latencyMs}ms)")
                 } else {
-                    log("  ⚠ 所有镜像超时，回退到 Alpine CDN")
+                    log("  ⚠ 所有镜像超时，回退到 Ubuntu 官方")
                 }
                 updateItem("rootfs", DownloadItemState.DOWNLOADING)
-                val rootfsUrl = bestAlpine?.url ?: alpineMirrors.first().url
+                val rootfsUrl = bestUbuntu?.url ?: ubuntuMirrors.first().url
                 downloadFile(rootfsUrl, rootfsTarball) { progress, downloaded, total, speed ->
                     updateProgress("rootfs", progress, downloaded, total, speed)
                 }
@@ -270,16 +273,16 @@ object LinuxEnvironmentManager {
             // 解压 rootfs（无论来源）
             if (!File(rootfsDir, "bin/sh").exists()) {
                 updateItem("rootfs", DownloadItemState.EXTRACTING)
-                log("  解压 rootfs...")
+                log("  解压 rootfs（约 200 MB，请耐心等待）...")
                 extractTarGz(rootfsTarball, rootfsDir)
-                log("  ✓ Alpine rootfs 就绪")
+                log("  ✓ Ubuntu rootfs 就绪")
             }
             rootfsTarball.delete()
 
-            // ── Step 3: 初始化 Alpine 包管理器 ──
-            log(">>> 阶段 3/6：初始化包管理器")
-            setupAlpineRepos()
-            log("  ✓ 包管理器就绪")
+            // ── Step 3: 初始化 Ubuntu 包管理器 ──
+            log(">>> 阶段 3/6：初始化 apt 包管理器")
+            setupUbuntuRepos()
+            log("  ✓ apt 就绪")
 
             // ── Step 4-6: 安装各版本 JDK ──
             val jdkList = listOf(8 to "jdk8", 11 to "jdk11", 17 to "jdk17", 21 to "jdk21")
@@ -287,9 +290,9 @@ object LinuxEnvironmentManager {
                 val (version, itemId) = pair
                 val jdk = JdkVersion.forVersion(version) ?: continue
                 val stepNum = index + 4
-                log(">>> 阶段 $stepNum/6：安装 ${jdk.label}（${jdk.alpinePackage}）")
+                log(">>> 阶段 $stepNum/6：安装 ${jdk.label}（${jdk.aptPackage}）")
                 updateItem(itemId, DownloadItemState.DOWNLOADING)
-                installAlpinePackage(jdk.alpinePackage) { progress, downloaded, total, speed ->
+                installUbuntuPackage(jdk.aptPackage) { progress, downloaded, total, speed ->
                     updateProgress(itemId, progress, downloaded, total, speed)
                 }
                 updateItem(itemId, DownloadItemState.COMPLETED)
@@ -386,43 +389,35 @@ object LinuxEnvironmentManager {
         }
     }
 
-    // ── Alpine 包安装 ──
-    private suspend fun installAlpinePackage(
+    // ── Ubuntu apt 包安装 ──
+    private suspend fun installUbuntuPackage(
         pkgName: String,
         onProgress: (Float, Long, Long, Long) -> Unit
     ) = withContext(Dispatchers.IO) {
-        // 使用 proot 在 rootfs 中安装包
-        // 首先更新索引，然后安装
-        val installScript = "/tmp/apk_install.sh"
-        ensureFile(rootfsDir, installScript, "#!/bin/sh\n" +
-            "apk update 2>/dev/null\n" +
-            "apk add --no-progress $pkgName 2>&1\n")
-        File(rootfsDir, installScript).setExecutable(true)
-
+        // 使用 proot 在 Ubuntu rootfs 中安装包
         val proc = ProcessBuilder()
             .command(
                 prootBinary.absolutePath,
-                "-0",                                   // 模拟 root
-                "-r", rootfsDir.absolutePath,           // rootfs 路径
-                "-b", "/dev:/dev",                      // 绑定 /dev
-                "-b", "/proc:/proc",                    // 绑定 /proc
-                "-b", "/sys:/sys",                      // 绑定 /sys
-                "-b", "${serverDir.absolutePath}:${serverDir.absolutePath}", // 共享服务器目录
-                "/bin/sh", "-c", "apk update && apk add --no-progress $pkgName"
+                "-0",
+                "-r", rootfsDir.absolutePath,
+                "-b", "/dev:/dev",
+                "-b", "/proc:/proc",
+                "-b", "/sys:/sys",
+                "-b", "${serverDir.absolutePath}:${serverDir.absolutePath}",
+                "/bin/sh", "-c",
+                "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $pkgName"
             )
             .redirectErrorStream(true)
             .start()
 
-        // 简单的进度模拟（Alpine 包管理没有精确进度，按时间估算）
+        // 按时间估算进度
         val startTime = System.currentTimeMillis()
         val estimatedBytes = when {
-            pkgName.startsWith("openjdk") -> 90_000_000L
+            pkgName.contains("openjdk") -> 120_000_000L
             else -> 50_000_000L
         }
-        val estimatedSeconds = 120
+        val estimatedSeconds = 180 // apt 比 apk 慢
 
-        // 读取输出同时估计进度
-        val reader = proc.inputStream.bufferedReader()
         CoroutineScope(Dispatchers.IO).launch {
             var elapsed = 1L
             while (proc.isAlive) {
@@ -434,17 +429,17 @@ object LinuxEnvironmentManager {
             }
         }
 
-        val output = reader.readText()
+        val output = proc.inputStream.bufferedReader().readText()
         val exitCode = proc.waitFor()
         if (exitCode != 0) {
-            throw RuntimeException("apk add $pkgName 失败 ($exitCode): ${output.take(500)}")
+            throw RuntimeException("apt install $pkgName 失败 ($exitCode): ${output.take(500)}")
         }
         onProgress(1f, estimatedBytes, estimatedBytes, 0)
     }
 
-    // ── Proot 执行命令 ──
+    // ── Proot 执行命令（在 Ubuntu rootfs 中） ──
     /**
-     * 通过 proot 在 Alpine 环境中执行命令。
+     * 通过 proot 在 Ubuntu 环境中执行命令。
      * @param command 完整 shell 命令
      * @param workDir 工作目录（相对 rootfs 或绝对路径）
      * @param onOutput 标准输出回调（逐行）
@@ -510,29 +505,29 @@ object LinuxEnvironmentManager {
     }
 
     // ── 工具函数 ──
-    private fun setupAlpineRepos() {
-        // 配置 Alpine 的 DNS 和软件源（自动选择与 rootfs 相同的最优镜像）
+    private fun setupUbuntuRepos() {
+        // 配置 DNS
         val resolvConf = File(rootfsDir, "etc/resolv.conf")
         resolvConf.parentFile?.mkdirs()
         resolvConf.writeText("nameserver 8.8.8.8\nnameserver 8.8.4.4\nnameserver 114.114.114.114\n")
 
-        // 尝试使用下载 rootfs 时的最优镜像（国内更快），否则用默认 CDN
-        val bestAlpineMirror = _mirrorResults.value.firstOrNull { it.error == null }
-        val mirrorHost = when (bestAlpineMirror?.key) {
-            "tuna" -> "https://mirrors.tuna.tsinghua.edu.cn/alpine"
-            "ustc" -> "https://mirrors.ustc.edu.cn/alpine"
-            "aliyun" -> "https://mirrors.aliyun.com/alpine"
-            "sjtu" -> "https://mirror.sjtu.edu.cn/alpine"
-            else -> "https://dl-cdn.alpinelinux.org/alpine"
+        // 自动选择与下载 rootfs 时相同的最优国内镜像
+        val bestMirror = _mirrorResults.value.firstOrNull { it.error == null }
+        val mirrorHost = when (bestMirror?.key) {
+            "tuna" -> "https://mirrors.tuna.tsinghua.edu.cn/ubuntu"
+            "ustc" -> "https://mirrors.ustc.edu.cn/ubuntu"
+            "aliyun" -> "https://mirrors.aliyun.com/ubuntu"
+            else -> "http://ports.ubuntu.com/ubuntu-ports"  // ARM 官方源
         }
-        val reposFile = File(rootfsDir, "etc/apk/repositories")
-        reposFile.parentFile?.mkdirs()
-        if (!reposFile.exists() || reposFile.readText().isBlank()) {
-            reposFile.writeText(
-                "$mirrorHost/v3.21/main\n" +
-                "$mirrorHost/v3.21/community\n"
+        val sourcesFile = File(rootfsDir, "etc/apt/sources.list")
+        sourcesFile.parentFile?.mkdirs()
+        if (!sourcesFile.exists() || sourcesFile.readText().isBlank()) {
+            sourcesFile.writeText(
+                "deb $mirrorHost noble main restricted universe multiverse\n" +
+                "deb $mirrorHost noble-updates main restricted universe multiverse\n" +
+                "deb $mirrorHost noble-security main restricted universe multiverse\n"
             )
-            log("  Alpine 软件源: $mirrorHost")
+            log("  Ubuntu 软件源: $mirrorHost")
         }
     }
 

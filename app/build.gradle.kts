@@ -16,11 +16,10 @@ val bundledAssetsDir = layout.projectDirectory.dir("src/main/assets/bundled")
 
 val downloadBundledAssets by tasks.registering {
     group = "bundled"
-    description = "下载 proot + Alpine rootfs 到 assets/bundled/，实现内置 Linux 环境"
+    description = "下载 proot + Ubuntu 24.04 rootfs 到 assets/bundled/，实现内置 Linux 环境"
 
     val prootVersion = "v5.4.0"
-    val alpineVersion = "3.21.0"
-    val alpineMinor = "v3.21"
+    val ubuntuVersion = "24.04"
 
     // proot 二进制
     val prootFiles = mapOf(
@@ -28,10 +27,10 @@ val downloadBundledAssets by tasks.registering {
         "proot-armhf"   to "https://github.com/proot-me/proot-static-build/releases/download/$prootVersion/proot_${prootVersion.drop(1)}_armhf",
     )
 
-    // Alpine minirootfs
-    val alpineFiles = mapOf(
-        "alpine-minirootfs-$alpineVersion-aarch64.tar.gz" to "https://dl-cdn.alpinelinux.org/alpine/$alpineMinor/releases/aarch64/alpine-minirootfs-$alpineVersion-aarch64.tar.gz",
-        "alpine-minirootfs-$alpineVersion-armhf.tar.gz"   to "https://dl-cdn.alpinelinux.org/alpine/$alpineMinor/releases/armhf/alpine-minirootfs-$alpineVersion-armhf.tar.gz",
+    // Ubuntu 24.04 base rootfs
+    val ubuntuFiles = mapOf(
+        "ubuntu-base-$ubuntuVersion-arm64.tar.gz" to "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/$ubuntuVersion/release/ubuntu-base-$ubuntuVersion-base-arm64.tar.gz",
+        "ubuntu-base-$ubuntuVersion-armhf.tar.gz" to "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/ubuntu-base/releases/$ubuntuVersion/release/ubuntu-base-$ubuntuVersion-base-armhf.tar.gz",
     )
 
     doLast {
@@ -94,7 +93,7 @@ val downloadBundledAssets by tasks.registering {
         prootFiles.forEach { (name, url) ->
             download(url, File(destDir, name))
         }
-        alpineFiles.forEach { (name, url) ->
+        ubuntuFiles.forEach { (name, url) ->
             download(url, File(destDir, name))
         }
         println("═══ 预置资源完成 ═══")

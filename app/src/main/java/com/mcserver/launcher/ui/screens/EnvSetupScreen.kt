@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
  * 首屏全自动环境初始化页面。
  *
  * 4 段式流程：
- *   1. Linux 环境（proot + Alpine + 4个 JDK）
+ *   1. Linux 环境（proot + Ubuntu 24.04 + 4个 JDK）
  *   2. 服务器核心（Paper/Purpur/Fabric/Forge/NeoForge/Vanilla/Spigot）
  *   3. 配置编辑（server.properties + .sh 脚本）
  *   4. 模组/插件（Modrinth + CurseForge）
@@ -316,7 +316,7 @@ private fun Step1Environment(
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
         )
         Text(
-            "下载 proot 运行时和 Alpine Linux，以及 4 个 Minecraft 所需的 Java 版本",
+            "下载 proot 运行时和 Ubuntu 24.04，以及 4 个 Minecraft 所需的 Java 版本",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -344,8 +344,8 @@ private fun Step1Environment(
                 )
                 Spacer(Modifier.height(8.dp))
                 listOf(
-                    "下载 proot 运行时（~1.2 MB）",
-                    "下载 Alpine Linux（~5 MB）",
+                    "提取 proot 运行时（内置）",
+                    "提取 Ubuntu 24.04（内置，约 30 MB）",
                     "安装 Java 8（Minecraft 1.8-1.12）",
                     "安装 Java 11（Minecraft 1.13-1.16）",
                     "安装 Java 17（Minecraft 1.17-1.20.4）",
