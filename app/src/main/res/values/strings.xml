@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kaze SLauncher</string>
+    <string name="tab_home">服务器</string>
+    <string name="tab_console">控制台</string>
+    <string name="tab_config">配置</string>
+    <string name="tab_settings">设置</string>
+    <string name="server_not_running">服务器未运行</string>
+    <string name="server_running">运行中</string>
+    <string name="server_starting">启动中...</string>
+    <string name="server_stopping">停止中...</string>
+    <string name="start_server">启动服务器</string>
+    <string name="stop_server">停止服务器</string>
+    <string name="select_jar">选择 JAR 文件</string>
+    <string name="no_jar_selected">未选择服务器文件</string>
+    <string name="jre_not_installed">Java 运行时未安装</string>
+    <string name="install_jre">安装 JRE</string>
+    <string name="jre_installed">JRE 已就绪</string>
+    <string name="save_config">保存配置</string>
+    <string name="theme_light">明亮</string>
+    <string name="theme_dark">暗色</string>
+    <string name="theme_amoled">AMOLED 省电</string>
+    <string name="notification_running">Kaze SLauncher 运行中</string>
+    <string name="notification_running_desc">Minecraft 服务器正在后台运行</string>
+</resources>

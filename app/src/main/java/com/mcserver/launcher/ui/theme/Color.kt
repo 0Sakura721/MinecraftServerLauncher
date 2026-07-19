@@ -1,0 +1,92 @@
+package com.mcserver.launcher.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+// ── 纯黑白灰调色板（三主题：Light / Dark / AMOLED） ──
+
+// Light — 白底黑字
+object LightColors {
+    val Primary = Color(0xFF1A1A1A)
+    val OnPrimary = Color(0xFFFFFFFF)
+    val PrimaryContainer = Color(0xFFF0F0F0)
+    val OnPrimaryContainer = Color(0xFF1A1A1A)
+    val Secondary = Color(0xFF333333)
+    val OnSecondary = Color(0xFFFFFFFF)
+    val SecondaryContainer = Color(0xFFE8E8E8)
+    val OnSecondaryContainer = Color(0xFF1A1A1A)
+    val Tertiary = Color(0xFF444444)
+    val OnTertiary = Color(0xFFFFFFFF)
+    val TertiaryContainer = Color(0xFFECECEC)
+    val OnTertiaryContainer = Color(0xFF1A1A1A)
+    val Background = Color(0xFFFFFFFF)
+    val OnBackground = Color(0xFF1A1A1A)
+    val Surface = Color(0xFFFFFFFF)
+    val OnSurface = Color(0xFF1A1A1A)
+    val SurfaceVariant = Color(0xFFF5F5F5)
+    val OnSurfaceVariant = Color(0xFF666666)
+    val SurfaceDim = Color(0xFFF8F8F8)
+    val Outline = Color(0xFFE0E0E0)
+    val OutlineVariant = Color(0xFFEEEEEE)
+    val Error = Color(0xFFD32F2F)
+    val OnError = Color(0xFFFFFFFF)
+    val ErrorContainer = Color(0xFFFFEBEE)
+    val OnErrorContainer = Color(0xFFB71C1C)
+}
+
+// Dark — 深灰底白字
+object DarkColors {
+    val Primary = Color(0xFFF5F5F5)
+    val OnPrimary = Color(0xFF1A1A1A)
+    val PrimaryContainer = Color(0xFF333333)
+    val OnPrimaryContainer = Color(0xFFF5F5F5)
+    val Secondary = Color(0xFFCCCCCC)
+    val OnSecondary = Color(0xFF1A1A1A)
+    val SecondaryContainer = Color(0xFF3A3A3A)
+    val OnSecondaryContainer = Color(0xFFE0E0E0)
+    val Tertiary = Color(0xFFBBBBBB)
+    val OnTertiary = Color(0xFF1A1A1A)
+    val TertiaryContainer = Color(0xFF383838)
+    val OnTertiaryContainer = Color(0xFFE0E0E0)
+    val Background = Color(0xFF1A1A1A)
+    val OnBackground = Color(0xFFF5F5F5)
+    val Surface = Color(0xFF1A1A1A)
+    val OnSurface = Color(0xFFF5F5F5)
+    val SurfaceVariant = Color(0xFF2A2A2A)
+    val OnSurfaceVariant = Color(0xFFAAAAAA)
+    val SurfaceDim = Color(0xFF141414)
+    val Outline = Color(0xFF444444)
+    val OutlineVariant = Color(0xFF333333)
+    val Error = Color(0xFFEF9A9A)
+    val OnError = Color(0xFF1A1A1A)
+    val ErrorContainer = Color(0xFF3E1010)
+    val OnErrorContainer = Color(0xFFFFCDD2)
+}
+
+// AMOLED — 纯黑底白字
+object AmoledColors {
+    val Primary = Color(0xFFEEEEEE)
+    val OnPrimary = Color(0xFF000000)
+    val PrimaryContainer = Color(0xFF222222)
+    val OnPrimaryContainer = Color(0xFFEEEEEE)
+    val Secondary = Color(0xFFCCCCCC)
+    val OnSecondary = Color(0xFF000000)
+    val SecondaryContainer = Color(0xFF2A2A2A)
+    val OnSecondaryContainer = Color(0xFFDDDDDD)
+    val Tertiary = Color(0xFFBBBBBB)
+    val OnTertiary = Color(0xFF000000)
+    val TertiaryContainer = Color(0xFF282828)
+    val OnTertiaryContainer = Color(0xFFDDDDDD)
+    val Background = Color(0xFF000000)
+    val OnBackground = Color(0xFFEEEEEE)
+    val Surface = Color(0xFF000000)
+    val OnSurface = Color(0xFFEEEEEE)
+    val SurfaceVariant = Color(0xFF111111)
+    val OnSurfaceVariant = Color(0xFF999999)
+    val SurfaceDim = Color(0xFF000000)
+    val Outline = Color(0xFF333333)
+    val OutlineVariant = Color(0xFF222222)
+    val Error = Color(0xFFEF9A9A)
+    val OnError = Color(0xFF000000)
+    val ErrorContainer = Color(0xFF2E0C0C)
+    val OnErrorContainer = Color(0xFFFFCDD2)
+}

@@ -1,0 +1,8 @@
+.gradle/
+build/
+local.properties
+.backup/
+*.iml
+.idea/
+*.aapt2.real
+*.aapt2.wrapper
