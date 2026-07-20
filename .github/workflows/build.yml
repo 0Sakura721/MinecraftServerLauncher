@@ -79,6 +79,11 @@ jobs:
             echo "Uploading debug APK (no signing config)"
           fi
           cp "$SOURCE_APK" "$APK_NAME"
-          gh release create "${TAG}" "$APK_NAME" --title "${TAG}" --notes "See commits for changes." --clobber 2>/dev/null || \
-          gh release upload "${TAG}" "$APK_NAME" --clobber
+          if gh release view "${TAG}" > /dev/null 2>&1; then
+            echo "Release ${TAG} exists, uploading asset..."
+            gh release upload "${TAG}" "$APK_NAME" --clobber
+          else
+            echo "Creating new release ${TAG}..."
+            gh release create "${TAG}" "$APK_NAME" --title "${TAG}" --notes "See commits for changes." --prerelease
+          fi
           echo "✅ APK uploaded to Release ${TAG}"
