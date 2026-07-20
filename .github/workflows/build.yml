@@ -70,14 +70,15 @@ jobs:
             echo "keyAlias=$KEY_ALIAS" >> local.properties
             echo "keyPassword=$KEY_PASSWORD" >> local.properties
             ./gradlew :app:assembleRelease --stacktrace
-            APK_PATH=$(ls app/build/outputs/apk/release/*.apk | head -1)
+            SOURCE_APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
             APK_NAME="Kaze-SLauncher-${TAG}-release.apk"
             echo "Uploading signed release APK"
           else
-            APK_PATH=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+            SOURCE_APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
             APK_NAME="Kaze-SLauncher-${TAG}-debug.apk"
             echo "Uploading debug APK (no signing config)"
           fi
-          gh release create "${TAG}" "${APK_PATH}" --title "${TAG}" --notes "See commits for changes." --clobber 2>/dev/null || \
-          gh release upload "${TAG}" "${APK_PATH}" --clobber --name "${APK_NAME}"
+          cp "$SOURCE_APK" "$APK_NAME"
+          gh release create "${TAG}" "$APK_NAME" --title "${TAG}" --notes "See commits for changes." --clobber 2>/dev/null || \
+          gh release upload "${TAG}" "$APK_NAME" --clobber
           echo "✅ APK uploaded to Release ${TAG}"
