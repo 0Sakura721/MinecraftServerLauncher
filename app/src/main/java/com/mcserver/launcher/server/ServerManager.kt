@@ -150,8 +150,12 @@ class ServerManager private constructor() {
 
     /** 真正执行一次启动（含自动重启时的重复调用） */
     private fun launchServer(config: ServerConfig) {
-        if (!TermuxManager.isTermuxInstalled(context)) {
+        // ── 环境检查：Termux 或 LinuxEnvironment(proot+Ubuntu) 至少有一方就绪 ──
+        val termuxOk = TermuxManager.isTermuxInstalled(context)
+        val linuxEnvOk = LinuxEnvironmentManager.isEnvironmentReady()
+        if (!termuxOk && !linuxEnvOk) {
             _serverStatus.value = ServerStatus(state = ServerState.ERROR)
+            termuxManager.notifyConsole("> 请先完成运行环境部署（Termux 或内置 Linux 环境）")
             return
         }
 

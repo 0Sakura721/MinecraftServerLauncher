@@ -676,6 +676,10 @@ class TermuxManager {
     /**
      * 直接把命令写入命名管道（不启动额外 Service）。
      * 由 ServerForegroundService 在收到广播后调用，也可作为前台回退。
+     *
+     * Android 8+ 对后台调用 startForegroundService 有限制，因此优先
+     * 通过 ServerForegroundService 广播转发（不受后台限制）。
+     * 此处作为最后兜底，捕获异常以防丢命令。
      */
     fun writeCommandToPipe(ctx: Context, cmd: String) {
         val pipe = File(serverDir(ctx), "cmdpipe")
@@ -692,9 +696,16 @@ class TermuxManager {
             arrayOf("-c", "timeout 5 printf '%s\\n' \"\$1\" >> \"\$2\"", "sh", cmd, pipe.absolutePath)
         )
         intent.putExtra("com.termux.RUN_COMMAND_WORKDIR", TERMUX_HOME)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            ctx.startForegroundService(intent)
-        else ctx.startService(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                ctx.startForegroundService(intent)
+            else ctx.startService(intent)
+        } catch (e: IllegalStateException) {
+            // Android 8+ 后台启动前台服务受限（应用切后台后可能触发）
+            emit("> 命令发送失败：后台限制，请切回前台后重试（${e.message?.take(80)}）")
+        } catch (_: Exception) {
+            emit("> 命令发送失败：未知错误")
+        }
     }
 
     // ─── 停止 ───

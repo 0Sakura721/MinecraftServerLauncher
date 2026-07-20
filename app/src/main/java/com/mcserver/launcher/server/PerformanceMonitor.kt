@@ -333,9 +333,11 @@ class PerformanceMonitor private constructor() {
      * 从日志行解析 TPS/MSPT 信息。
      * 支持:
      * - Spark 插件: "TPS from last 1m, 5m, 15m: 20.0, 19.8, 19.5"
-     * - Paper 内置: "Mean TPS: 19.85" / "Mean tick time: 1.234 ms"
+     * - Paper 内置: "Mean TPS: 19.85" / "Mean tick time: 1.234 ms" / "[Paper] TPS: 19.8"
      * - Plan 插件: "[Plan] Analysis results"
      * - Purpur: "Current TPS = 20.0"
+     * - Fabric/Carpet: "TPS: 20.0 MSPT: 50.0"
+     * - 通用格式: 任何含 "TPS:" + "ms" 的行
      */
     fun feedLogLine(line: String) {
         try {
@@ -350,9 +352,9 @@ class PerformanceMonitor private constructor() {
                 }
             }
 
-            // Paper 内置 TPS
+            // Paper 内置 TPS（含 [Paper] TPS: 格式）
             if (line.contains("Mean TPS") || line.contains("TPS:")) {
-                val match = Regex("""(?:TPS|Mean TPS)[:\s]*(\d+\.\d+)""").find(line)
+                val match = Regex("""(?:Mean\s+)?TPS[:\s]*(\d+\.\d+)""").find(line)
                 match?.let {
                     estimatedTps = it.groupValues[1].toFloatOrNull()?.coerceIn(0f, 20f) ?: estimatedTps
                 }
@@ -366,6 +368,18 @@ class PerformanceMonitor private constructor() {
                 }
             }
 
+            // Fabric/Carpet mod TPS: "TPS: 20.0 MSPT: 50.0"
+            if (line.contains("TPS:") && line.contains("MSPT:") || line.contains("mspt")) {
+                val tpsMatch = Regex("""TPS:\s*(\d+\.\d+)""").find(line)
+                tpsMatch?.let {
+                    estimatedTps = it.groupValues[1].toFloatOrNull()?.coerceIn(0f, 20f) ?: estimatedTps
+                }
+                val msptMatch = Regex("""MSPT:\s*(\d+\.?\d*)""").find(line)
+                msptMatch?.let {
+                    estimatedMspt = it.groupValues[1].toFloatOrNull()?.coerceIn(0f, 1000f) ?: estimatedMspt
+                }
+            }
+
             // Paper MSPT
             if (line.contains("MSPT") || line.contains("Mean tick time")) {
                 val match = Regex("""(?:MSPT|Mean tick time)[:\s]*(\d+\.?\d*)""").find(line)
@@ -374,8 +388,16 @@ class PerformanceMonitor private constructor() {
                 }
             }
 
+            // 通用 TPS + ms 格式：任何包含 "TPS: XX ms" 的行（自定义插件）
+            if (line.contains("TPS:") && line.contains("ms")) {
+                val match = Regex("""TPS:\s*(\d+\.\d+)""").find(line)
+                match?.let {
+                    estimatedTps = it.groupValues[1].toFloatOrNull()?.coerceIn(0f, 20f) ?: estimatedTps
+                }
+            }
+
             // Server tick 完成时间
-            if (line.contains("Done (") && line.contains("s)!") || line.contains("ms)")) {
+            if (line.contains("Done (") && (line.contains("s)!") || line.contains("ms)"))) {
                 val match = Regex("""Done\s*\(\d+\.?\d*[sm]s?!.*?(\d+\.?\d*)ms""").find(line)
                 match?.let {
                     val ms = it.groupValues[1].toFloatOrNull()

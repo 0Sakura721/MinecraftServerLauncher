@@ -339,12 +339,34 @@ object HealthChecker {
         val requiredVersion = McVersionCompat.getRequiredJavaVersion(config.jarPath)
         val serverType = McVersionCompat.guessServerType(config.jarPath)
 
-        val currentJavaVersion = try {
-            (System.getProperty("java.version") ?: "17")
-                .substringBefore(".")
-                .substringBefore("-")
-                .toIntOrNull() ?: 17
-        } catch (_: Exception) { 17 }
+        // 获取实际将用于运行服务器的 Java 版本：
+        // 优先从 JreManager（内置 JRE），回退到 LinuxEnvironmentManager（proot+Ubuntu JDK），
+        // 最后才用 Termux 安装的 Java 版本。
+        val currentJavaVersion = when {
+            ServerManager.instance.selectedJreVersion.toIntOrNull() != null ->
+                ServerManager.instance.selectedJreVersion.toIntOrNull()!!
+            LinuxEnvironmentManager.isEnvironmentReady() -> {
+                // 从 McVersionCompat 推断所需版本并检查是否已安装
+                val candidate = listOf(21, 17, 11, 8).firstOrNull {
+                    LinuxEnvironmentManager.isJdkInstalled(it)
+                }
+                candidate ?: (ServerManager.instance.selectedJreVersion.toIntOrNull() ?: 17)
+            }
+            else -> {
+                // 回退：检查 Termux 中的 Java 版本（通过检查 Termux java 路径）
+                val termuxJava = File("${TermuxManager.TERMUX_BIN}/java")
+                if (termuxJava.exists()) {
+                    try {
+                        val proc = ProcessBuilder(termuxJava.absolutePath, "-version")
+                            .redirectErrorStream(true).start()
+                        val output = proc.inputStream.bufferedReader().readText()
+                        proc.waitFor()
+                        val match = Regex("""version\s+"(\d+)""").find(output)
+                        match?.groupValues?.get(1)?.toIntOrNull() ?: 17
+                    } catch (_: Exception) { 17 }
+                } else 17
+            }
+        }
 
         return if (currentJavaVersion >= requiredVersion) {
             HealthCheck("Java 兼容性", true,
@@ -421,10 +443,21 @@ object HealthChecker {
         sb.appendLine("  状态: ${termuxState.name}")
         sb.appendLine()
 
-        // Java 信息
+        // Java 信息（报告实际将用于运行服务器的 Java 版本）
         sb.appendLine("--- Java 运行时 ---")
-        sb.appendLine("  Java 版本: ${System.getProperty("java.version", "未知")}")
-        sb.appendLine("  Java 厂商: ${System.getProperty("java.vendor", "未知")}")
+        val actualJavaVersion = when {
+            ServerManager.instance.selectedJreVersion.toIntOrNull() != null ->
+                ServerManager.instance.selectedJreVersion
+            LinuxEnvironmentManager.isEnvironmentReady() -> {
+                val installed = listOf(21, 17, 11, 8).filter {
+                    LinuxEnvironmentManager.isJdkInstalled(it)
+                }
+                installed.joinToString(", ") { "Java $it" }.ifEmpty { "未知" }
+            }
+            else -> "Termux: ${System.getProperty("java.version", "未知")}"
+        }
+        sb.appendLine("  Java 版本: $actualJavaVersion")
+        sb.appendLine("  JRE 管理器: ${ServerManager.instance.selectedJreVersion}")
         sb.appendLine("  系统架构: ${System.getProperty("os.arch", "未知")}")
         sb.appendLine()
 
