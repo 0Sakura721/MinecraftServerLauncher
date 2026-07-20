@@ -198,12 +198,12 @@ object LinuxEnvironmentManager {
 
         try {
             val items = mutableListOf(
-                DownloadItem("proot", "proot 运行时", "从 APK 直接提取"),
-                DownloadItem("rootfs", "Ubuntu 24.04", "从 APK 提取并解压"),
-                DownloadItem("jdk8", "Java 8", "Minecraft 1.8-1.12（apt 在线安装）"),
-                DownloadItem("jdk11", "Java 11", "Minecraft 1.13-1.16（apt 在线安装）"),
-                DownloadItem("jdk17", "Java 17", "Minecraft 1.17-1.20.4（apt 在线安装）"),
-                DownloadItem("jdk21", "Java 21", "Minecraft 1.20.5+（apt 在线安装）")
+                DownloadItem("proot", "proot 运行时", "自带，解压即用"),
+                DownloadItem("rootfs", "Ubuntu 24.04", "自带，解压即用"),
+                DownloadItem("jdk8", "Java 8", "Minecraft 1.8-1.12（需在线安装）"),
+                DownloadItem("jdk11", "Java 11", "Minecraft 1.13-1.16（需在线安装）"),
+                DownloadItem("jdk17", "Java 17", "Minecraft 1.17-1.20.4（需在线安装）"),
+                DownloadItem("jdk21", "Java 21", "Minecraft 1.20.5+（需在线安装）")
             )
             _downloadItems.value = items
 
