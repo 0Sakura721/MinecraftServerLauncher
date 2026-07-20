@@ -198,12 +198,12 @@ object LinuxEnvironmentManager {
 
         try {
             val items = mutableListOf(
-                DownloadItem("proot", "proot 运行时", "Linux 进程模拟器"),
-                DownloadItem("rootfs", "Ubuntu 24.04", "完整 glibc Linux 根文件系统"),
-                DownloadItem("jdk8", "Java 8", "Minecraft 1.8-1.12"),
-                DownloadItem("jdk11", "Java 11", "Minecraft 1.13-1.16"),
-                DownloadItem("jdk17", "Java 17", "Minecraft 1.17-1.20.4"),
-                DownloadItem("jdk21", "Java 21", "Minecraft 1.20.5+")
+                DownloadItem("proot", "proot 运行时", "从 APK 直接提取"),
+                DownloadItem("rootfs", "Ubuntu 24.04", "从 APK 提取并解压"),
+                DownloadItem("jdk8", "Java 8", "Minecraft 1.8-1.12（apt 在线安装）"),
+                DownloadItem("jdk11", "Java 11", "Minecraft 1.13-1.16（apt 在线安装）"),
+                DownloadItem("jdk17", "Java 17", "Minecraft 1.17-1.20.4（apt 在线安装）"),
+                DownloadItem("jdk21", "Java 21", "Minecraft 1.20.5+（apt 在线安装）")
             )
             _downloadItems.value = items
 
@@ -284,13 +284,18 @@ object LinuxEnvironmentManager {
             setupUbuntuRepos()
             log("  ✓ apt 就绪")
 
-            // ── Step 4-6: 安装各版本 JDK ──
+            // ── Step 4-6: 安装各版本 JDK（跳过已安装的）
             val jdkList = listOf(8 to "jdk8", 11 to "jdk11", 17 to "jdk17", 21 to "jdk21")
             for ((index, pair) in jdkList.withIndex()) {
                 val (version, itemId) = pair
                 val jdk = JdkVersion.forVersion(version) ?: continue
                 val stepNum = index + 4
-                log(">>> 阶段 $stepNum/6：安装 ${jdk.label}（${jdk.aptPackage}）")
+                if (isJdkInstalled(version)) {
+                    log(">>> 阶段 $stepNum/6：${jdk.label} — 已安装，跳过")
+                    updateItem(itemId, DownloadItemState.COMPLETED)
+                    continue
+                }
+                log(">>> 阶段 $stepNum/6：在线安装 ${jdk.label}（apt install ${jdk.aptPackage}）")
                 updateItem(itemId, DownloadItemState.DOWNLOADING)
                 installUbuntuPackage(jdk.aptPackage) { progress, downloaded, total, speed ->
                     updateProgress(itemId, progress, downloaded, total, speed)
