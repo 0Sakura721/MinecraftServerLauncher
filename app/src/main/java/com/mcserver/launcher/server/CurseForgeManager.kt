@@ -32,8 +32,8 @@ class CurseForgeManager(private val apiKey: String) {
         }
     }
 
-    private const val BASE_URL = "https://api.curseforge.com/v1"
-    private const val MINECRAFT_GAME_ID = 432
+    private val BASE_URL = "https://api.curseforge.com/v1"
+    private val MINECRAFT_GAME_ID = 432
 
     /** 模组加载器类型 */
     enum class ModLoaderType(val id: Int) {
