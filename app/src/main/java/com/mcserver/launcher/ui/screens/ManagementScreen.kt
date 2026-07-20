@@ -71,7 +71,7 @@ fun ManagementScreen(
                     StatItem("插件", "$pluginCount", Icons.Filled.Extension)
                     StatItem("世界", "$worldCount", Icons.Filled.Public)
                     StatItem("OP", "$opCount", Icons.Filled.AdminPanelSettings)
-                    StatItem("备份", "${serverManager.backups.value.size}", Icons.Filled.Backup)
+                    StatItem("备份", "$backupCount", Icons.Filled.Backup)
                 }
                 diskUsage?.let {
                     Spacer(Modifier.height(8.dp))
