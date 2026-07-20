@@ -6,17 +6,31 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 /**
- * CurseForge API 管理器 — 无需用户 API Key，使用嵌入式 Key。
+ * CurseForge API 管理器。
  *
  * API Key 获取方式：CurseForge for Studios 控制台免费注册即可获得。
  * 此 Key 仅用于模组/插件搜索和下载，不涉及用户身份认证。
  */
-object CurseForgeManager {
+class CurseForgeManager(private val apiKey: String) {
 
-    // 嵌入式 API Key（同 FoldCraftLauncher/ZalithLauncher 方案）
-    private const val API_KEY = "\$2a\$10\$nVaG0Q/HezA8/IhzJp54X.fBDliuJMgCmRUsv/FwpffLsWyBcCOe."
+    companion object {
+        @Volatile
+        var instance: CurseForgeManager? = null
+            private set
+
+        fun initialize(apiKey: String) {
+            if (instance == null) {
+                synchronized(this) {
+                    if (instance == null) {
+                        instance = CurseForgeManager(apiKey)
+                    }
+                }
+            }
+        }
+    }
 
     private const val BASE_URL = "https://api.curseforge.com/v1"
     private const val MINECRAFT_GAME_ID = 432
@@ -78,13 +92,13 @@ object CurseForgeManager {
             val params = mutableListOf(
                 "gameId=$MINECRAFT_GAME_ID",
                 "classId=${fileType.id}",
-                "searchFilter=$query",
+                "searchFilter=${URLEncoder.encode(query, "UTF-8")}",
                 "sortField=2",      // 按下载量排序
                 "sortOrder=desc",
                 "pageSize=$pageSize",
                 "index=$index"
             )
-            if (gameVersion != null) params.add("gameVersion=$gameVersion")
+            if (gameVersion != null) params.add("gameVersion=${URLEncoder.encode(gameVersion, "UTF-8")}")
             if (modLoaderType != ModLoaderType.ANY) params.add("modLoaderType=${modLoaderType.id}")
 
             val urlStr = "$BASE_URL/mods/search?${params.joinToString("&")}"
@@ -128,7 +142,7 @@ object CurseForgeManager {
     ): Result<List<CfFile>> = withContext(Dispatchers.IO) {
         try {
             val params = mutableListOf("pageSize=50")
-            if (gameVersion != null) params.add("gameVersion=$gameVersion")
+            if (gameVersion != null) params.add("gameVersion=${URLEncoder.encode(gameVersion, "UTF-8")}")
             if (modLoaderType != ModLoaderType.ANY) params.add("modLoaderType=${modLoaderType.id}")
 
             val urlStr = "$BASE_URL/mods/$modId/files?${params.joinToString("&")}"
@@ -179,7 +193,7 @@ object CurseForgeManager {
         val url = URL(urlStr)
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "GET"
-        conn.setRequestProperty("x-api-key", API_KEY)
+        conn.setRequestProperty("x-api-key", apiKey)
         conn.setRequestProperty("Accept", "application/json")
         conn.setRequestProperty("User-Agent", "MCServerLauncher/1.0")
         conn.connectTimeout = 10000

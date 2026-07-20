@@ -1,6 +1,7 @@
 package com.mcserver.launcher.server
 
 import android.content.Context
+import android.util.Log
 import com.mcserver.launcher.McApplication
 import com.mcserver.launcher.data.ServerConfig
 import com.mcserver.launcher.data.ServerState
@@ -20,6 +21,7 @@ import java.io.File
  */
 object ServerStateManager {
 
+    private const val TAG = "ServerStateManager"
     private val context: Context get() = McApplication.instance
     private val stateFile: File get() = File(context.filesDir, "server_state.json")
 
@@ -56,7 +58,8 @@ object ServerStateManager {
                 lastSessionId = json.optString("lastSessionId", "")
             )
             _state
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "load state failed", e)
             _state = PersistentState()
             _state
         }
@@ -77,7 +80,9 @@ object ServerStateManager {
                 put("lastSessionId", state.lastSessionId)
             }
             stateFile.writeText(json.toString())
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w(TAG, "save state failed", e)
+        }
     }
 
     /** 服务器启动时调用 */

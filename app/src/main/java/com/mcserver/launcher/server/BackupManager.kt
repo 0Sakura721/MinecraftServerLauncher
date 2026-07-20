@@ -1,5 +1,6 @@
 package com.mcserver.launcher.server
 
+import android.util.Log
 import com.mcserver.launcher.McApplication
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,7 @@ import java.util.Locale
  */
 object BackupManager {
 
+    private const val TAG = "BackupManager"
     private val serverDir: File get() = TermuxManager.serverDir(McApplication.instance)
     private val backupsRoot: File get() = File(serverDir, "backups")
 
@@ -33,6 +35,22 @@ object BackupManager {
         val createdAt: Long,
         val sizeMB: Long
     )
+
+    private fun validateBackupName(name: String) {
+        require(name.isNotBlank()) { "备份名称不能为空" }
+        require(!name.contains("/") && !name.contains("\") && !name.contains("..") && !name.contains(":")) {
+            "备份名称包含非法字符: $name"
+        }
+    }
+
+    private fun validatePathInsideRoot(file: File, root: File): Boolean {
+        return try {
+            file.canonicalFile.startsWith(root.canonicalFile)
+        } catch (e: Exception) {
+            Log.w(TAG, "validatePathInsideRoot failed", e)
+            false
+        }
+    }
 
     private fun timestamp(): String =
         SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -65,9 +83,16 @@ object BackupManager {
             val hasJar = serverDir.listFiles()?.any { it.extension == "jar" } ?: false
             if (!hasJar) return@withContext Result.failure(Exception("未找到服务器 JAR，无法备份"))
 
+            if (label.isNotBlank()) {
+                validateBackupName(label)
+            }
+
             backupsRoot.mkdirs()
             val name = "backup_${timestamp()}${if (label.isNotBlank()) "_$label" else ""}"
             val target = File(backupsRoot, name)
+            if (!validatePathInsideRoot(target, backupsRoot)) {
+                return@withContext Result.failure(SecurityException("备份路径越界: $name"))
+            }
             copyDirectory(serverDir, target, excludeNames = setOf("backups", "server.log", "cmdpipe", "mcserver.pid"))
             refresh()
             Result.success(name)
@@ -79,7 +104,11 @@ object BackupManager {
     /** 恢复指定备份到服务器目录（恢复前自动做一次当前状态备份，便于回滚） */
     suspend fun restoreBackup(name: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            validateBackupName(name)
             val src = File(backupsRoot, name)
+            if (!validatePathInsideRoot(src, backupsRoot)) {
+                return@withContext Result.failure(SecurityException("备份路径越界: $name"))
+            }
             if (!src.exists() || !src.isDirectory)
                 return@withContext Result.failure(Exception("备份不存在：$name"))
 
@@ -101,7 +130,11 @@ object BackupManager {
     /** 删除一个备份 */
     suspend fun deleteBackup(name: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            validateBackupName(name)
             val dir = File(backupsRoot, name)
+            if (!validatePathInsideRoot(dir, backupsRoot)) {
+                return@withContext Result.failure(SecurityException("备份路径越界: $name"))
+            }
             if (dir.exists()) dir.deleteRecursively()
             refresh()
             Result.success(Unit)

@@ -46,10 +46,18 @@ class DownloadForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val initialNotification = NotificationCompat.Builder(this, McApplication.CHANNEL_NOTIFICATIONS)
+            .setContentTitle("准备下载...")
+            .setContentText("正在准备 Java 运行时下载")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setOngoing(true)
+            .build()
+        startForeground(NOTIFICATION_ID, initialNotification)
+
         when (intent?.action) {
             ACTION_CANCEL -> {
                 // 通知用户取消下载（由 JreManager 处理实际取消逻辑）
-                JreManager(applicationContext).cancelDownload()
+                ServerManager.instance.cancelDownload()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
@@ -74,8 +82,7 @@ class DownloadForegroundService : Service() {
 
     private fun updateNotification() {
         try {
-            val jreManager = JreManager(applicationContext)
-            val jreInfo = jreManager.jreInfo.value
+            val jreInfo = ServerManager.instance.jreInfo.value
 
             val pendingIntent = PendingIntent.getActivity(
                 this, 0,
@@ -173,6 +180,7 @@ class DownloadForegroundService : Service() {
         super.onDestroy()
         isRunning = false
         updateJob?.cancel()
+        serviceScope.cancel()
     }
 
     // ─── 格式化工具（避免依赖外部 utils，保持服务独立性） ───

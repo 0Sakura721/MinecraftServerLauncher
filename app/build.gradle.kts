@@ -149,14 +149,40 @@ android {
         } catch (_: Exception) { "unknown" }}\"")
     }
 
+    val localProperties = java.util.Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { localProperties.load(it) }
+    }
+
     signingConfigs {
-        create("release") { storeFile = rootProject.file("debug.keystore"); storePassword = "kaze123"; keyAlias = "kaze_debug"; keyPassword = "kaze123" }
-        create("kazeDebug") { storeFile = rootProject.file("debug.keystore"); storePassword = "kaze123"; keyAlias = "kaze_debug"; keyPassword = "kaze123" }
+        val hasReleaseSigning = localProperties.getProperty("storeFile") != null &&
+            localProperties.getProperty("storePassword") != null &&
+            localProperties.getProperty("keyAlias") != null &&
+            localProperties.getProperty("keyPassword") != null
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(localProperties.getProperty("storeFile"))
+                storePassword = localProperties.getProperty("storePassword")
+                keyAlias = localProperties.getProperty("keyAlias")
+                keyPassword = localProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
-        release { isMinifyEnabled = true; isShrinkResources = true; signingConfig = signingConfigs.getByName("release"); proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
-        debug { isMinifyEnabled = false; signingConfig = signingConfigs.getByName("kazeDebug"); isDebuggable = true }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (signingConfigs.findByName("release") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+        debug {
+            isMinifyEnabled = false
+            isDebuggable = true
+        }
     }
 
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

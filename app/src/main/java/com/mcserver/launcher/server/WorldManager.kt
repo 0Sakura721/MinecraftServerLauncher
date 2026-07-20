@@ -34,6 +34,21 @@ object WorldManager {
         val isDefault: Boolean = false  // 是否是默认世界
     )
 
+    private fun validateWorldName(name: String) {
+        require(name.isNotBlank()) { "世界名称不能为空" }
+        require(!name.contains("/") && !name.contains("\") && !name.contains("..") && !name.contains(":")) {
+            "世界名称包含非法字符: $name"
+        }
+    }
+
+    private fun validatePathInsideRoot(file: File, root: File): Boolean {
+        return try {
+            file.canonicalFile.startsWith(root.canonicalFile)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /**
      * 列出服务器目录中所有世界。
      * 通过检测目录中是否存在 level.dat 来识别世界。
@@ -83,6 +98,7 @@ object WorldManager {
      */
     suspend fun setDefaultWorld(worldName: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            validateWorldName(worldName)
             val props = File(serverDir, "server.properties")
             if (!props.exists()) return@withContext Result.failure(Exception("server.properties 不存在"))
 
@@ -109,12 +125,16 @@ object WorldManager {
      */
     suspend fun deleteWorld(worldName: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
+            validateWorldName(worldName)
             val defaultWorld = getDefaultWorldName()
             if (worldName == defaultWorld) {
                 return@withContext Result.failure(Exception("不能删除当前默认世界，请先切换到其他世界"))
             }
 
             val worldDir = File(serverDir, worldName)
+            if (!validatePathInsideRoot(worldDir, serverDir)) {
+                return@withContext Result.failure(SecurityException("世界路径越界: $worldName"))
+            }
             if (!worldDir.exists()) return@withContext Result.failure(Exception("世界目录不存在"))
             if (!File(worldDir, "level.dat").exists()) return@withContext Result.failure(Exception("不是有效的世界目录"))
 
@@ -129,7 +149,11 @@ object WorldManager {
      */
     suspend fun exportWorld(worldName: String): Result<String> = withContext(Dispatchers.IO) {
         try {
+            validateWorldName(worldName)
             val worldDir = File(serverDir, worldName)
+            if (!validatePathInsideRoot(worldDir, serverDir)) {
+                return@withContext Result.failure(SecurityException("世界路径越界: $worldName"))
+            }
             if (!worldDir.exists() || !File(worldDir, "level.dat").exists()) {
                 return@withContext Result.failure(Exception("世界不存在或已损坏"))
             }
@@ -140,7 +164,8 @@ object WorldManager {
             downloadsDir.mkdirs()
 
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val zipFile = File(downloadsDir, "${worldName}_$timestamp.zip")
+            val safeWorldName = worldName.replace("/", "_").replace("\", "_").replace(":", "_")
+            val zipFile = File(downloadsDir, "${safeWorldName}_$timestamp.zip")
 
             ZipOutputStream(zipFile.outputStream().buffered()).use { zos ->
                 worldDir.walkTopDown().forEach { file ->

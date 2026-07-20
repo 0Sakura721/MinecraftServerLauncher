@@ -1,6 +1,7 @@
 package com.mcserver.launcher.server
 
 import android.os.*
+import android.util.Log
 import com.mcserver.launcher.McApplication
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +26,7 @@ import java.io.RandomAccessFile
 class PerformanceMonitor private constructor() {
 
     companion object {
+        private const val TAG = "PerformanceMonitor"
         val instance: PerformanceMonitor by lazy { PerformanceMonitor() }
         const val HISTORY_SIZE = 60  // 保留最近 60 个采样点（2 分钟）
     }
@@ -138,7 +140,10 @@ class PerformanceMonitor private constructor() {
             val pidFile = File(serverDir, "mcserver.pid")
             if (!pidFile.exists()) return null
             pidFile.readText().trim().toIntOrNull()
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            Log.d(TAG, "getServerPid failed", e)
+            null
+        }
     }
 
     private fun collectServerMemoryInfo(): Pair<Long, Long> {
@@ -165,7 +170,10 @@ class PerformanceMonitor private constructor() {
                 ?.toLongOrNull() ?: (vmRss * 2)
 
             return (vmRss / 1024) to (vmSize / 1024)
-        } catch (_: Exception) { return fallbackMemoryInfo() }
+        } catch (e: Exception) {
+            Log.d(TAG, "collectServerMemoryInfo failed", e)
+            return fallbackMemoryInfo()
+        }
     }
 
     private fun fallbackMemoryInfo(): Pair<Long, Long> {
@@ -194,7 +202,10 @@ class PerformanceMonitor private constructor() {
             if (totalDiff == 0L) return 0f
 
             ((totalDiff - idleDiff).toFloat() / totalDiff * 100f).coerceIn(0f, 100f)
-        } catch (_: Exception) { 0f }
+        } catch (e: Exception) {
+            Log.d(TAG, "collectSystemCpuUsage failed", e)
+            0f
+        }
     }
 
     private data class CpuStat(
@@ -215,7 +226,10 @@ class PerformanceMonitor private constructor() {
                 parts[3].toLong(), parts[4].toLong(), parts[5].toLong(),
                 parts[6].toLong(), if (parts.size > 7) parts[7].toLong() else 0
             )
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            Log.d(TAG, "readProcStat failed", e)
+            null
+        }
     }
 
     // ─── 进程级 CPU（借鉴 Pterodactyl 的进程监控） ───
@@ -259,7 +273,10 @@ class PerformanceMonitor private constructor() {
             lastProcessCpuTime = totalTime
             lastProcessCpuSampleTime = now
             return 0f
-        } catch (_: Exception) { 0f }
+        } catch (e: Exception) {
+            Log.d(TAG, "collectProcessCpuUsage failed", e)
+            0f
+        }
     }
 
     // ─── 线程数 ───
@@ -274,7 +291,10 @@ class PerformanceMonitor private constructor() {
                 ?.substringAfter(":")
                 ?.trim()
                 ?.toIntOrNull() ?: 0
-        } catch (_: Exception) { 0 }
+        } catch (e: Exception) {
+            Log.d(TAG, "collectThreadCount failed", e)
+            0
+        }
     }
 
     // ─── 磁盘 I/O ───
@@ -314,7 +334,10 @@ class PerformanceMonitor private constructor() {
             lastIoSampleTime = now
 
             readRate to writeRate
-        } catch (_: Exception) { 0L to 0L }
+        } catch (e: Exception) {
+            Log.d(TAG, "collectDiskIO failed", e)
+            0L to 0L
+        }
     }
 
     // ─── TPS / MSPT ───
@@ -407,6 +430,8 @@ class PerformanceMonitor private constructor() {
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.d(TAG, "feedLogLine failed", e)
+        }
     }
 }

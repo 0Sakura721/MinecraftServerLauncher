@@ -1,6 +1,7 @@
 package com.mcserver.launcher.server
 
 import android.content.Context
+import android.util.Log
 import com.mcserver.launcher.McApplication
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +37,7 @@ class DownloadManager {
     )
 
     companion object {
+        private const val TAG = "DownloadManager"
         val instance: DownloadManager by lazy { DownloadManager() }
     }
 
@@ -204,6 +206,7 @@ class DownloadManager {
         } catch (e: CancellationException) {
             // 用户取消
         } catch (e: Exception) {
+            Log.w(TAG, "download failed: ${task.id}", e)
             updateTask(task.id) {
                 it.copy(state = DownloadState.FAILED, errorMessage = e.message ?: "下载失败")
             }

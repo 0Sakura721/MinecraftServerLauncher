@@ -93,6 +93,7 @@ class TermuxManager {
     }
 
     private val context: Context get() = McApplication.instance
+    var scope: CoroutineScope? = null
     private val isRunning = AtomicBoolean(false)
     private var tailJob: Job? = null
     private var logFile: File? = null
@@ -123,6 +124,19 @@ class TermuxManager {
 
     val running: Boolean get() = isRunning.get()
 
+    private fun validateShellSafe(s: String): Boolean {
+        val dangerous = listOf(";", "`", "$(", "|", ">", "<", "&&", "||", "\n", "\r")
+        for (d in dangerous) {
+            if (s.contains(d)) return false
+        }
+        return true
+    }
+
+    private fun escapeSingleQuote(s: String): String {
+        return s.replace("'", "'\''")
+    }
+
+
     // ─── 服务器存活检测（用于应用重启后恢复状态） ───
 
     /**
@@ -138,7 +152,22 @@ class TermuxManager {
             val pid = pidFile.readText().trim().toIntOrNull() ?: return false
             // 检查 /proc/[pid] 是否存在
             val procDir = File("/proc/$pid")
-            procDir.exists() && procDir.isDirectory
+            if (!procDir.exists() || !procDir.isDirectory) return false
+            // 检查进程名是否为 java
+            try {
+                val cmdline = File("/proc/$pid/cmdline")
+                if (cmdline.exists()) {
+                    val content = cmdline.readText()
+                    if (content.contains("java", ignoreCase = true)) return true
+                }
+                val comm = File("/proc/$pid/comm")
+                if (comm.exists()) {
+                    val content = comm.readText()
+                    if (content.contains("java", ignoreCase = true)) return true
+                }
+            } catch (_: Exception) {}
+            // 回退到仅检查目录存在（兼容性考虑）
+            true
         } catch (_: Exception) { false }
     }
 
@@ -151,15 +180,16 @@ class TermuxManager {
         return try {
             if (!isServerProcessAlive()) return false
             val dir = serverDir(context)
-            logFile = File(dir, "server.log")
-            if (!logFile!!.exists()) {
+            val file = File(dir, "server.log")
+            if (!file.exists()) {
                 logFile = null
                 return false
             }
+            logFile = file
             isRunning.set(true)
             _stateChanged.tryEmit(true)
             emit("> 检测到服务器仍在运行，正在恢复连接...")
-            startTailLog(logFile!!)
+            startTailLog(file)
             emit("> 已恢复与服务器的连接")
             true
         } catch (e: Exception) {
@@ -272,27 +302,36 @@ class TermuxManager {
                 val xms = config.minRamMB
                 val noguiArg = if (config.nogui) "nogui" else ""
                 val args = config.additionalArgs.trim()
+                if (args.isNotBlank() && !validateShellSafe(args)) {
+                    return@withContext Result.failure(IllegalArgumentException("启动参数包含不安全的 shell 元字符"))
+                }
 
                 val pidFile = File(serverDir, "mcserver.pid").absolutePath
+                val safeServerDir = escapeSingleQuote(serverDir.absolutePath)
+                val safePipePath = escapeSingleQuote(pipePath)
+                val safeLogPath = escapeSingleQuote(logPath)
+                val safePidFile = escapeSingleQuote(pidFile)
+                val safeJarName = escapeSingleQuote(targetJar.name)
+
                 val script = buildString {
                     appendLine("#!/data/data/com.termux/files/usr/bin/bash")
-                    appendLine("cd ${serverDir.absolutePath}")
+                    appendLine("cd '$safeServerDir'")
                     // 清理可能残留的管道
-                    appendLine("rm -f '$pipePath'")
-                    appendLine("mkfifo '$pipePath'")
-                    appendLine("echo '--- Minecraft Server Started ---' > '$logPath'")
-                    appendLine(": > '$pidFile'")
+                    appendLine("rm -f '$safePipePath'")
+                    appendLine("mkfifo '$safePipePath'")
+                    appendLine("echo '--- Minecraft Server Started ---' > '$safeLogPath'")
+                    appendLine(": > '$safePidFile'")
                     // 关键：让 java 直接从命名管道读取 stdin（而非 tail -f | java）。
                     // 这样停止时只需 kill java 进程，管道写端关闭，java 读到 EOF 自然退出，
                     // 不会再遗留 tail 进程，也无需 pkill 整条命令（仿 Pterodactyl 的进程分组管理）。
-                    appendLine("$termuxJava -Xmx${xmx}M -Xms${xms}M $args -jar '${targetJar.name}' $noguiArg >> '$logPath' 2>&1 < '$pipePath' &")
+                    appendLine("$termuxJava -Xmx${xmx}M -Xms${xms}M $args -jar '$safeJarName' $noguiArg >> '$safeLogPath' 2>&1 < '$safePipePath' &")
                     appendLine("JAVA_PID=\$!")
                     // 记录 java 进程 PID，供精确停止（不再依赖写死的 jar 名做 pkill）
-                    appendLine("echo \$JAVA_PID > '$pidFile'")
+                    appendLine("echo \$JAVA_PID > '$safePidFile'")
                     // 阻塞直到 java 退出，再写入结束标记（用于崩溃/停止检测）
                     appendLine("wait \$JAVA_PID")
-                    appendLine("echo '--- Server Stopped ---' >> '$logPath'")
-                    appendLine("rm -f '$pipePath' '$pidFile'")
+                    appendLine("echo '--- Server Stopped ---' >> '$safeLogPath'")
+                    appendLine("rm -f '$safePipePath' '$safePidFile'")
                 }
                 scriptFile.writeText(script)
                 scriptFile.setExecutable(true)
@@ -323,7 +362,7 @@ class TermuxManager {
                 // 5. 追踪日志文件输出
                 isRunning.set(true)
                 _stateChanged.tryEmit(true)
-                startTailLog(logFile!!)
+                logFile?.let { startTailLog(it) }
 
                 Result.success(Unit)
             } catch (e: Exception) {
@@ -339,7 +378,8 @@ class TermuxManager {
 
     private fun startTailLog(file: File) {
         tailJob?.cancel()
-        tailJob = CoroutineScope(Dispatchers.IO).launch {
+        val coroutineScope = scope ?: CoroutineScope(Dispatchers.IO + SupervisorJob())
+        tailJob = coroutineScope.launch {
             var lastSize = 0L
             var leftover = byteArrayOf()
             while (isActive && isRunning.get()) {
@@ -382,7 +422,9 @@ class TermuxManager {
                         lastSize = 0
                         leftover = byteArrayOf()
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.d(TAG, "tail error", e)
+                }
                 delay(300)
             }
         }
@@ -545,7 +587,8 @@ class TermuxManager {
      * 在后台协程中执行，不阻塞 UI。
      */
     private fun sendCommandViaRcon(cmd: String) {
-        CoroutineScope(Dispatchers.IO).launch {
+        val coroutineScope = scope ?: CoroutineScope(Dispatchers.IO + SupervisorJob())
+        coroutineScope.launch {
             try {
                 val result = rconClient?.sendCommand(cmd)
                 if (result?.isSuccess == true) {
@@ -587,7 +630,8 @@ class TermuxManager {
         }
         val pwd = config.rconPassword.ifEmpty { RconClient.generatePassword() }
         rconClient = RconClient(port = config.rconPort, password = pwd)
-        CoroutineScope(Dispatchers.IO).launch {
+        val coroutineScope = scope ?: CoroutineScope(Dispatchers.IO + SupervisorJob())
+        coroutineScope.launch {
             try {
                 // 服务器启动后 RCON 端口可能需要几秒才能就绪，重试几次
                 var connected = false
@@ -775,7 +819,8 @@ class TermuxManager {
         } catch (_: Exception) {}
 
         // 收尾兜底：若 15 秒后仍未收到退出标记，强制标记为已停止
-        CoroutineScope(Dispatchers.IO).launch {
+        val coroutineScope = scope ?: CoroutineScope(Dispatchers.IO + SupervisorJob())
+        coroutineScope.launch {
             delay(15000)
             if (isRunning.get()) {
                 isRunning.set(false)

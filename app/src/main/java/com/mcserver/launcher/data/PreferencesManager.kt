@@ -58,6 +58,7 @@ class PreferencesManager(private val context: Context) {
         private val KEY_CORNER_RADIUS = intPreferencesKey("corner_radius")
         private val KEY_LAYOUT_DENSITY = stringPreferencesKey("layout_density")
         private val KEY_FONT_SIZE = stringPreferencesKey("font_size")
+        private val KEY_CURSEFORGE_API_KEY = stringPreferencesKey("curseforge_api_key")
     }
 
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { prefs ->
@@ -198,5 +199,13 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setJarPath(path: String) {
         context.dataStore.edit { prefs -> prefs[KEY_JAR_PATH] = path }
+    }
+
+    val curseforgeApiKey: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CURSEFORGE_API_KEY] ?: ""
+    }
+
+    suspend fun setCurseforgeApiKey(apiKey: String) {
+        context.dataStore.edit { prefs -> prefs[KEY_CURSEFORGE_API_KEY] = apiKey }
     }
 }

@@ -29,6 +29,21 @@ object ResourcePackManager {
         val lastModified: Long
     )
 
+    private fun validateFileName(name: String) {
+        require(name.isNotBlank()) { "文件名不能为空" }
+        require(!name.contains("/") && !name.contains("\") && !name.contains("..") && !name.contains(":")) {
+            "文件名包含非法字符: $name"
+        }
+    }
+
+    private fun validatePathInsideRoot(file: File, root: File): Boolean {
+        return try {
+            file.canonicalFile.startsWith(root.canonicalFile)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /**
      * 资源包配置（写入 server.properties）
      */
@@ -64,17 +79,29 @@ object ResourcePackManager {
 
     /** 启用/禁用资源包 */
     suspend fun togglePack(pack: PackInfo): Boolean = withContext(Dispatchers.IO) {
+        validateFileName(pack.fileName)
         val file = File(packsDir, pack.fileName)
+        if (!validatePathInsideRoot(file, packsDir)) {
+            throw SecurityException("文件路径越界: ${pack.fileName}")
+        }
         if (pack.enabled) {
             // 禁用：重命名为 .disabled
             val disabled = File(packsDir, "${pack.fileName}.disabled")
+            if (!validatePathInsideRoot(disabled, packsDir)) {
+                throw SecurityException("文件路径越界: ${pack.fileName}.disabled")
+            }
             file.renameTo(disabled)
         } else {
             // 启用：去掉 .disabled
             val original = if (pack.fileName.endsWith(".disabled")) {
-                File(packsDir, pack.fileName.removeSuffix(".disabled"))
+                val origName = pack.fileName.removeSuffix(".disabled")
+                validateFileName(origName)
+                File(packsDir, origName)
             } else {
                 File(packsDir, pack.fileName)
+            }
+            if (!validatePathInsideRoot(original, packsDir)) {
+                throw SecurityException("文件路径越界")
             }
             file.renameTo(original)
         }
@@ -83,7 +110,12 @@ object ResourcePackManager {
 
     /** 删除资源包 */
     suspend fun deletePack(pack: PackInfo): Boolean = withContext(Dispatchers.IO) {
-        File(packsDir, pack.fileName).delete()
+        validateFileName(pack.fileName)
+        val file = File(packsDir, pack.fileName)
+        if (!validatePathInsideRoot(file, packsDir)) {
+            throw SecurityException("文件路径越界: ${pack.fileName}")
+        }
+        file.delete()
     }
 
     /** 读取当前的资源包配置 */

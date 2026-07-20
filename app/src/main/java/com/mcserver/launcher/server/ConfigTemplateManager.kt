@@ -20,7 +20,8 @@ object ConfigTemplateManager {
         val description: String,
         val config: ServerConfig,
         val serverProperties: Map<String, String> = emptyMap(),
-        val templateVersion: Int = 1
+        val templateVersion: Int = 1,
+        val warnings: List<String> = emptyList()
     )
 
     /**
@@ -61,7 +62,7 @@ object ConfigTemplateManager {
                     put("restartCooldownSec", config.restartCooldownSec)
                     put("backupOnStop", config.backupOnStop)
                     put("rconEnabled", config.rconEnabled)
-                    put("rconPassword", config.rconPassword)
+                    put("rconPassword", "")
                     put("rconPort", config.rconPort)
                 })
 
@@ -139,11 +140,16 @@ object ConfigTemplateManager {
                 propsJson.keys().forEach { key -> props[key] = propsJson.getString(key) }
             }
 
+            val warnings = mutableListOf<String>()
+            if (config.rconEnabled && config.rconPassword.isEmpty()) {
+                warnings.add("RCON 密码已被清空，请重新设置 RCON 密码以确保安全")
+            }
             Result.success(ServerTemplate(
                 name = json.optString("name", "导入的配置"),
                 description = json.optString("description", ""),
                 config = config,
-                serverProperties = props
+                serverProperties = props,
+                warnings = warnings
             ))
         } catch (e: Exception) {
             Result.failure(e)

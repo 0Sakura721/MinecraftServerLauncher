@@ -6,6 +6,7 @@ import com.mcserver.launcher.McApplication
 import com.mcserver.launcher.data.ServerConfig
 import java.io.File
 import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.net.Socket
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -267,14 +268,13 @@ object HealthChecker {
 
     private fun checkPortAvailable(port: Int): HealthCheck {
         return try {
-            val socket = Socket()
-            socket.connect(InetSocketAddress("127.0.0.1", port), 2000)
-            socket.close()
+            val serverSocket = ServerSocket(port)
+            serverSocket.close()
+            HealthCheck("端口 $port", true, "端口 $port 可用", Severity.INFO)
+        } catch (e: Exception) {
             HealthCheck("端口 $port", false,
                 "端口 $port 已被占用，请更换端口或关闭占用程序",
                 detail = "可在「服务器配置」中修改端口号。")
-        } catch (e: Exception) {
-            HealthCheck("端口 $port", true, "端口 $port 可用", Severity.INFO)
         }
     }
 
@@ -344,7 +344,7 @@ object HealthChecker {
         // 最后才用 Termux 安装的 Java 版本。
         val currentJavaVersion = when {
             ServerManager.instance.selectedJreVersion.toIntOrNull() != null ->
-                ServerManager.instance.selectedJreVersion.toIntOrNull()!!
+                ServerManager.instance.selectedJreVersion.toIntOrNull() ?: 17
             LinuxEnvironmentManager.isEnvironmentReady() -> {
                 // 从 McVersionCompat 推断所需版本并检查是否已安装
                 val candidate = listOf(21, 17, 11, 8).firstOrNull {

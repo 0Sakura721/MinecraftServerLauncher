@@ -35,6 +35,21 @@ object CrashAnalyzer {
         val severity: CrashSeverity = CrashSeverity.MEDIUM
     )
 
+    private fun validateFileName(name: String) {
+        require(name.isNotBlank()) { "文件名不能为空" }
+        require(!name.contains("/") && !name.contains("\") && !name.contains("..") && !name.contains(":")) {
+            "文件名包含非法字符: $name"
+        }
+    }
+
+    private fun validatePathInsideRoot(file: File, root: File): Boolean {
+        return try {
+            file.canonicalFile.startsWith(root.canonicalFile)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     enum class CrashCause(val label: String) {
         OUT_OF_MEMORY("内存不足 (OOM)"),
         MOD_CONFLICT("模组冲突"),
@@ -354,7 +369,12 @@ object CrashAnalyzer {
     /** 删除崩溃报告 */
     fun deleteReport(fileName: String): Boolean {
         return try {
-            val file = File(getCrashReportsDir(), fileName)
+            validateFileName(fileName)
+            val dir = getCrashReportsDir()
+            val file = File(dir, fileName)
+            if (!validatePathInsideRoot(file, dir)) {
+                throw SecurityException("文件路径越界: $fileName")
+            }
             file.delete()
         } catch (_: Exception) { false }
     }
@@ -370,7 +390,12 @@ object CrashAnalyzer {
     /** 获取崩溃报告内容 */
     fun getReportContent(fileName: String): String? {
         return try {
-            val file = File(getCrashReportsDir(), fileName)
+            validateFileName(fileName)
+            val dir = getCrashReportsDir()
+            val file = File(dir, fileName)
+            if (!validatePathInsideRoot(file, dir)) {
+                throw SecurityException("文件路径越界: $fileName")
+            }
             if (file.exists()) file.readText() else null
         } catch (_: Exception) { null }
     }

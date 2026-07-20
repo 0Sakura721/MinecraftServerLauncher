@@ -21,7 +21,6 @@ import com.mcserver.launcher.ui.navigation.bottomNavItems
 import com.mcserver.launcher.ui.screens.*
 import com.mcserver.launcher.ui.theme.McServerTheme
 import com.mcserver.launcher.ui.theme.ThemeMode
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -38,9 +37,10 @@ class MainActivity : ComponentActivity() {
 
             McServerTheme(themeMode = themeMode) {
                 if (!setupCompleted) {
+                    val setupScope = rememberCoroutineScope()
                     EnvSetupScreen(
                         onSetupComplete = {
-                            kotlinx.coroutines.MainScope().launch {
+                            setupScope.launch {
                                 prefsManager.setSetupCompleted()
                             }
                         }

@@ -113,7 +113,7 @@ fun ServerPropertiesEditor(
                     Text("将保存对 server.properties 的修改。")
                     if (saveMessage != null) {
                         Spacer(Modifier.height(8.dp))
-                        Text(saveMessage!!, color = MaterialTheme.colorScheme.error)
+                        Text(saveMessage ?: "", color = MaterialTheme.colorScheme.error)
                     }
                 }
             },

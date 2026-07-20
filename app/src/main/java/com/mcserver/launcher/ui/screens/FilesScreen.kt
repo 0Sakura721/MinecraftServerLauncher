@@ -338,20 +338,22 @@ fun FilesScreen() {
     }
 
     // server.properties 结构化编辑器（全屏覆盖）
-    if (showPropertiesEditor && propertiesEditorFile != null) {
-        ServerPropertiesEditor(
-            configFile = propertiesEditorFile!!,
+    propertiesEditorFile?.let { file ->
+        if (showPropertiesEditor) {
+            ServerPropertiesEditor(
+                configFile = file,
             onSaved = {
                 showPropertiesEditor = false
                 propertiesEditorFile = null
                 message = "server.properties 已保存"
                 scope.launch { refreshAll() }
             },
-            onDismiss = {
-                showPropertiesEditor = false
-                propertiesEditorFile = null
-            }
-        )
+                onDismiss = {
+                    showPropertiesEditor = false
+                    propertiesEditorFile = null
+                }
+            )
+        }
     }
 }
 

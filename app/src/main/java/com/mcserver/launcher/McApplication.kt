@@ -4,11 +4,15 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Intent
+import android.util.Log
 import android.os.Build
+import com.mcserver.launcher.server.ScheduleManager
 import com.mcserver.launcher.server.ServerForegroundService
+import com.mcserver.launcher.server.ServerManager
 
 class McApplication : Application() {
     companion object {
+        private const val TAG = "McApplication"
         const val CHANNEL_SERVER = "server_status"
         const val CHANNEL_NOTIFICATIONS = "server_notifications"
         lateinit var instance: McApplication
@@ -27,7 +31,9 @@ class McApplication : Application() {
                 } else {
                     instance.startService(intent)
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.e(TAG, "showServerEventNotification failed", e)
+            }
         }
     }
 
@@ -35,6 +41,8 @@ class McApplication : Application() {
         super.onCreate()
         instance = this
         createNotificationChannels()
+        ServerManager.init(this)
+        ScheduleManager.startScheduler()
     }
 
     private fun createNotificationChannels() {

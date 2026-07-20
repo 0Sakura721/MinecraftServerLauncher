@@ -45,7 +45,10 @@ class RconClient(
     private var output: DataOutputStream? = null
     private var requestId = 0
 
-    val isConnected: Boolean get() = socket?.isConnected == true && !socket!!.isClosed
+    val isConnected: Boolean get() {
+        val s = socket
+        return s?.isConnected == true && !s.isClosed
+    }
 
     /**
      * 连接到 RCON 服务器并认证。
@@ -55,11 +58,12 @@ class RconClient(
         try {
             disconnect()
 
-            socket = Socket(host, port).apply {
+            val s = Socket(host, port).apply {
                 soTimeout = 5000
             }
-            input = DataInputStream(socket!!.getInputStream())
-            output = DataOutputStream(socket!!.getOutputStream())
+            socket = s
+            input = DataInputStream(s.getInputStream())
+            output = DataOutputStream(s.getOutputStream())
 
             // 发送登录请求
             requestId = 1

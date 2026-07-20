@@ -267,7 +267,7 @@ fun ServerCoreDownloadScreen(
                 if (loadingVersions) {
                     CircularProgressIndicator(Modifier.size(24.dp).padding(8.dp), strokeWidth = 2.dp)
                 } else if (versionError != null) {
-                    Text(versionError!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Text(versionError ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 } else {
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -302,7 +302,7 @@ fun ServerCoreDownloadScreen(
                     if (loadingBuilds) {
                         CircularProgressIndicator(Modifier.size(24.dp).padding(8.dp), strokeWidth = 2.dp)
                     } else if (buildError != null) {
-                        Text(buildError!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        Text(buildError ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     } else {
                         Spacer(Modifier.height(8.dp))
                         LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {

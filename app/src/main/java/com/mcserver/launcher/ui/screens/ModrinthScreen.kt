@@ -105,9 +105,9 @@ fun ModrinthScreen() {
     }
 
     // 详情视图
-    if (selectedProject != null) {
+    selectedProject?.let { project ->
         ProjectDetailView(
-            project = selectedProject!!,
+            project = project,
             versions = projectVersions,
             loading = loading,
             downloading = downloading,
@@ -185,7 +185,7 @@ fun ModrinthScreen() {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
-                    Text(error!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                    Text(error ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
                 }
             }
         }

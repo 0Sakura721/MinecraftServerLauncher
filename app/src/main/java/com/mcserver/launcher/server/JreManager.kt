@@ -1,6 +1,7 @@
 package com.mcserver.launcher.server
 
 import android.app.*
+import android.util.Log
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -52,6 +53,7 @@ class JreManager(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "JreManager"
         internal const val ADOPTIUM_API = "https://api.adoptium.net/v3"
         internal const val ALIYUN_MIRROR = "https://mirrors.aliyun.com/adoptium"
         internal const val TSINGHUA_MIRROR = "https://mirrors.tuna.tsinghua.edu.cn/Adoptium"
@@ -84,11 +86,15 @@ class JreManager(private val context: Context) {
                 if (lines.size >= 3) { selectedVersion = lines[0]; selectedPackage = lines[1].ifEmpty { "jdk" }; customBaseUrl = lines.getOrElse(2) { "" } }
                 if (lines.size >= 4) mirror = lines[3]
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w(TAG, "loadPrefs failed", e)
+        }
     }
 
     private fun savePrefs() {
-        try { prefsFile.writeText("$selectedVersion\n$selectedPackage\n$customBaseUrl\n$mirror") } catch (_: Exception) {}
+        try { prefsFile.writeText("$selectedVersion\n$selectedPackage\n$customBaseUrl\n$mirror") } catch (e: Exception) {
+            Log.w(TAG, "savePrefs failed", e)
+        }
     }
 
     private fun getApiBase(): String = when {

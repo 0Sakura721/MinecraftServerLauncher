@@ -39,7 +39,7 @@ class ServerForegroundService : Service() {
             if (intent?.action == ACTION_SEND_COMMAND) {
                 val cmd = intent.getStringExtra(EXTRA_COMMAND) ?: return
                 try {
-                    TermuxManager().writeCommandToPipe(this@ServerForegroundService, cmd)
+                    ServerManager.instance.termuxManager.writeCommandToPipe(this@ServerForegroundService, cmd)
                 } catch (_: Exception) {}
             }
         }
@@ -60,6 +60,14 @@ class ServerForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val initialNotification = NotificationCompat.Builder(this, McApplication.CHANNEL_SERVER)
+            .setContentTitle("服务器正在启动...")
+            .setContentText("正在准备 Minecraft 服务器")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setOngoing(true)
+            .build()
+        startForeground(NOTIFICATION_ID, initialNotification)
+
         when (intent?.action) {
             ACTION_STOP -> {
                 isRunning = false
@@ -179,6 +187,7 @@ class ServerForegroundService : Service() {
         super.onDestroy()
         isRunning = false
         updateJob?.cancel()
+        serviceScope.cancel()
         try { unregisterReceiver(commandReceiver) } catch (_: Exception) {}
     }
 }

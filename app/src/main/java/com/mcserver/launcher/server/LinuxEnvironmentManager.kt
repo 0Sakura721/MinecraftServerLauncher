@@ -1,6 +1,7 @@
 package com.mcserver.launcher.server
 
 import android.content.Context
+import android.util.Log
 import com.mcserver.launcher.McApplication
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -79,6 +80,7 @@ data class DownloadItem(
 object LinuxEnvironmentManager {
 
     private const val TAG = "LinuxEnvManager"
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // ── 下载源（多源 + 自动测速） ──
     // 镜像源由 MirrorSpeedTester 预定义，下载前自动测速选择最优
@@ -163,7 +165,8 @@ object LinuxEnvironmentManager {
                 }
             }
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "extractBundledAsset failed: $assetName", e)
             false
         }
     }
@@ -399,6 +402,7 @@ object LinuxEnvironmentManager {
         pkgName: String,
         onProgress: (Float, Long, Long, Long) -> Unit
     ) = withContext(Dispatchers.IO) {
+        require(validatePackageName(pkgName)) { "软件包名包含非法字符: $pkgName" }
         // 使用 proot 在 Ubuntu rootfs 中安装包
         val proc = ProcessBuilder()
             .command(
@@ -423,7 +427,7 @@ object LinuxEnvironmentManager {
         }
         val estimatedSeconds = 180 // apt 比 apk 慢
 
-        CoroutineScope(Dispatchers.IO).launch {
+        val progressJob = scope.launch {
             var elapsed = 1L
             while (proc.isAlive) {
                 delay(500)
@@ -457,6 +461,7 @@ object LinuxEnvironmentManager {
     ): Int {
         check(prootBinary.exists()) { "proot 未安装" }
         check(rootfsDir.exists()) { "rootfs 未解压" }
+        require(validateShellSafe(workDir)) { "工作目录包含不安全的 shell 元字符: $workDir" }
 
         val args = mutableListOf(
             prootBinary.absolutePath,
@@ -489,8 +494,11 @@ object LinuxEnvironmentManager {
      * 异步执行命令并通过 Flow 输出。
      */
     fun executeAsync(command: String, workDir: String = "/root"): SharedFlow<String> {
+        if (!validateShellSafe(workDir)) {
+            throw IllegalArgumentException("工作目录包含不安全的 shell 元字符: $workDir")
+        }
         val flow = MutableSharedFlow<String>(extraBufferCapacity = 200)
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             val args = listOf(
                 prootBinary.absolutePath, "-0",
                 "-r", rootfsDir.absolutePath,
@@ -510,6 +518,19 @@ object LinuxEnvironmentManager {
     }
 
     // ── 工具函数 ──
+
+    private fun validateShellSafe(s: String): Boolean {
+        val dangerous = listOf(";", "`", "$(", "|", ">", "<", "&&", "||", "\n", "\r")
+        for (d in dangerous) {
+            if (s.contains(d)) return false
+        }
+        return true
+    }
+
+    private fun validatePackageName(pkgName: String): Boolean {
+        return pkgName.all { it.isLetterOrDigit() || it == '-' || it == '_' || it == '.' }
+    }
+
     private fun setupUbuntuRepos() {
         // 配置 DNS
         val resolvConf = File(rootfsDir, "etc/resolv.conf")

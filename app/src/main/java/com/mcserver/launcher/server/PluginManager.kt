@@ -26,6 +26,21 @@ object PluginManager {
         val enabled: Boolean = true
     )
 
+    private fun validateFileName(name: String) {
+        require(name.isNotBlank()) { "文件名不能为空" }
+        require(!name.contains("/") && !name.contains("\") && !name.contains("..") && !name.contains(":")) {
+            "文件名包含非法字符: $name"
+        }
+    }
+
+    private fun validatePathInsideRoot(file: File, root: File): Boolean {
+        return try {
+            file.canonicalFile.startsWith(root.canonicalFile)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /** 扫描 plugins 目录，解析所有插件的元数据 */
     suspend fun scanPlugins(): List<PluginInfo> = withContext(Dispatchers.IO) {
         val list = mutableListOf<PluginInfo>()
@@ -144,14 +159,24 @@ object PluginManager {
 
     /** 启用/禁用插件（通过重命名） */
     suspend fun togglePlugin(plugin: PluginInfo): Boolean = withContext(Dispatchers.IO) {
+        validateFileName(plugin.fileName)
         val jarFile = File(pluginsDir, plugin.fileName)
+        if (!validatePathInsideRoot(jarFile, pluginsDir)) {
+            throw SecurityException("文件路径越界: ${plugin.fileName}")
+        }
         if (plugin.enabled) {
             // 禁用：添加 .disabled 后缀文件
             val disabledMarker = File(pluginsDir, "${plugin.fileName}.disabled")
+            if (!validatePathInsideRoot(disabledMarker, pluginsDir)) {
+                throw SecurityException("文件路径越界: ${plugin.fileName}.disabled")
+            }
             disabledMarker.createNewFile()
         } else {
             // 启用：删除 .disabled 标记
             val disabledMarker = File(pluginsDir, "${plugin.fileName}.disabled")
+            if (!validatePathInsideRoot(disabledMarker, pluginsDir)) {
+                throw SecurityException("文件路径越界: ${plugin.fileName}.disabled")
+            }
             disabledMarker.delete()
         }
         true
@@ -159,8 +184,15 @@ object PluginManager {
 
     /** 删除插件 */
     suspend fun deletePlugin(plugin: PluginInfo): Boolean = withContext(Dispatchers.IO) {
+        validateFileName(plugin.fileName)
         val jarFile = File(pluginsDir, plugin.fileName)
+        if (!validatePathInsideRoot(jarFile, pluginsDir)) {
+            throw SecurityException("文件路径越界: ${plugin.fileName}")
+        }
         val disabledMarker = File(pluginsDir, "${plugin.fileName}.disabled")
+        if (!validatePathInsideRoot(disabledMarker, pluginsDir)) {
+            throw SecurityException("文件路径越界: ${plugin.fileName}.disabled")
+        }
         disabledMarker.delete()
         jarFile.delete()
     }

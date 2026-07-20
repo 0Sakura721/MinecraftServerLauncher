@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">ports.ubuntu.com</domain>
+        <domain includeSubdomains="true">mirrors.aliyun.com</domain>
+        <domain includeSubdomains="true">mirrors.tuna.tsinghua.edu.cn</domain>
+        <domain includeSubdomains="true">mirrors.ustc.edu.cn</domain>
+        <domain includeSubdomains="true">mirrors.163.com</domain>
+        <domain includeSubdomains="true">mirrors.huaweicloud.com</domain>
+        <domain includeSubdomains="true">mirrors.cloud.tencent.com</domain>
+    </domain-config>
 </network-security-config>

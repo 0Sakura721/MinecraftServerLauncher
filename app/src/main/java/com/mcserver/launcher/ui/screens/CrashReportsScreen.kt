@@ -42,9 +42,9 @@ fun CrashReportsScreen() {
     }
 
     // 详情视图
-    if (selectedReport != null) {
+    selectedReport?.let { report ->
         CrashReportDetailView(
-            report = selectedReport!!,
+            report = report,
             reportContent = reportContent,
             onBack = {
                 selectedReport = null
