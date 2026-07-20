@@ -38,7 +38,7 @@ object BackupManager {
 
     private fun validateBackupName(name: String) {
         require(name.isNotBlank()) { "备份名称不能为空" }
-        require(!name.contains("/") && !name.contains("\") && !name.contains("..") && !name.contains(":")) {
+        require(!name.contains("/") && !name.contains("\\") && !name.contains("..") && !name.contains(":")) {
             "备份名称包含非法字符: $name"
         }
     }

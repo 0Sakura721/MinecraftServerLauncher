@@ -31,7 +31,7 @@ object ResourcePackManager {
 
     private fun validateFileName(name: String) {
         require(name.isNotBlank()) { "文件名不能为空" }
-        require(!name.contains("/") && !name.contains("\") && !name.contains("..") && !name.contains(":")) {
+        require(!name.contains("/") && !name.contains("\\") && !name.contains("..") && !name.contains(":")) {
             "文件名包含非法字符: $name"
         }
     }

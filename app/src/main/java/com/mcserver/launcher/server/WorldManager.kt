@@ -36,7 +36,7 @@ object WorldManager {
 
     private fun validateWorldName(name: String) {
         require(name.isNotBlank()) { "世界名称不能为空" }
-        require(!name.contains("/") && !name.contains("\") && !name.contains("..") && !name.contains(":")) {
+        require(!name.contains("/") && !name.contains("\\") && !name.contains("..") && !name.contains(":")) {
             "世界名称包含非法字符: $name"
         }
     }
@@ -164,7 +164,7 @@ object WorldManager {
             downloadsDir.mkdirs()
 
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val safeWorldName = worldName.replace("/", "_").replace("\", "_").replace(":", "_")
+            val safeWorldName = worldName.replace("/", "_").replace("\\", "_").replace(":", "_")
             val zipFile = File(downloadsDir, "${safeWorldName}_$timestamp.zip")
 
             ZipOutputStream(zipFile.outputStream().buffered()).use { zos ->

@@ -56,11 +56,11 @@ class ServerManager private constructor(private val context: Context) {
     /** 备份列表（仿 MCSManager） */
     val backups: StateFlow<List<BackupManager.BackupEntry>> get() = BackupManager.backups
     suspend fun refreshBackups() = BackupManager.refresh()
-    suspend fun createBackup(label: String = "") =
+    suspend fun createBackup(label: String = ""): Result<String> =
         BackupManager.createBackup(label).also { refreshBackups() }
-    suspend fun restoreBackup(name: String) =
+    suspend fun restoreBackup(name: String): Result<Unit> =
         BackupManager.restoreBackup(name).also { refreshBackups() }
-    suspend fun deleteBackup(name: String) =
+    suspend fun deleteBackup(name: String): Result<Unit> =
         BackupManager.deleteBackup(name).also { refreshBackups() }
 
     /** 状态恢复标记：是否正在尝试恢复之前的服务器连接 */
