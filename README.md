@@ -94,7 +94,6 @@ app/src/main/java/com/mcserver/launcher/
 |:------:|:----:|
 | ![支付宝](docs/images/alipay.png) | ![微信](docs/images/wechat.png) |
 
-> 赞赏时欢迎备注你的 ID，我会把你加入赞助者名单～
 
 ## 📄 许可证
 
