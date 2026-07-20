@@ -56,5 +56,5 @@ jobs:
           APK_PATH=$(ls app/build/outputs/apk/debug/*.apk | head -1)
           APK_NAME="Kaze-SLauncher-${TAG}-bundled-debug.apk"
           echo "Uploading ${APK_PATH} to Release ${TAG} as ${APK_NAME}..."
-          gh release upload "${TAG}" "${APK_PATH}" --clobber --target "${GITHUB_SHA}"
+          gh release upload "${TAG}" "${APK_PATH}" --clobber
           echo "✅ APK uploaded to Release ${TAG}"
