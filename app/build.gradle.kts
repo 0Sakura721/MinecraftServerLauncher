@@ -31,6 +31,11 @@ val downloadBundledAssets by tasks.registering {
             "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-$ubuntuVersion-base-arm64.tar.gz",
         "ubuntu-base-24.04-armhf.tar.gz" to
             "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-$ubuntuVersion-base-armhf.tar.gz",
+        // Java 21 JDK (内置首次启动零等待)
+        "java-21-aarch64.tar.gz" to
+            "https://mirrors.aliyun.com/adoptium/21/jdk/aarch64/linux/jdk-21.0.14+9_linux-aarch64_bin.tar.gz",
+        "java-21-armhf.tar.gz" to
+            "https://mirrors.aliyun.com/adoptium/21/jdk/arm/linux/jdk-21.0.14+9_linux-arm_bin.tar.gz",
     )
 
     doLast {
@@ -81,7 +86,8 @@ val downloadBundledAssets by tasks.registering {
             if (!download(url, File(destDir, name))) ok = false
         }
         // 验证 proot tarball 已 commit
-        listOf("proot-aarch64.tar.gz", "proot-armhf.tar.gz").forEach { name ->
+        listOf("proot-aarch64.tar.gz", "proot-armhf.tar.gz",
+            "java-21-aarch64.tar.gz", "java-21-armhf.tar.gz").forEach { name ->
             val f = File(destDir, name)
             if (!f.exists() || f.length() == 0L) {
                 System.err.println("  ✗ 缺少内置资源 $name（应已 commit 到 git）")

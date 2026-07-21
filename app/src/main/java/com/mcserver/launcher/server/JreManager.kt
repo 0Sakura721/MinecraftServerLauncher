@@ -75,8 +75,31 @@ class JreManager(private val context: Context) {
 
     init {
         loadPrefs()
+        extractBuiltinJava()
         _jreInfo.value = checkJre()
         startDownloadService()
+    }
+
+    private fun extractBuiltinJava() {
+        val arch = getDeviceArch()
+        val assetName = "java-21-${arch}.tar.gz"
+        val targetDir = jreDirFor("21")
+
+        if (targetDir.exists()) return
+
+        try {
+            context.assets.open("bundled/$assetName").use { input ->
+                val tempFile = File(context.cacheDir, "java_builtin_temp.tar.gz")
+                FileOutputStream(tempFile).use { output ->
+                    input.copyTo(output)
+                }
+                extractTarGz(tempFile, targetDir)
+                javaExecutableFor("21").setExecutable(true)
+                tempFile.delete()
+            }
+        } catch (e: IOException) {
+            Log.w(TAG, "extractBuiltinJava failed", e)
+        }
     }
 
     private fun loadPrefs() {
