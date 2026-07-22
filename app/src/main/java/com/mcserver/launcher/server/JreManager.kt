@@ -75,22 +75,27 @@ class JreManager(private val context: Context) {
 
     init {
         loadPrefs()
-        extractBuiltinJava(selectedVersion, selectedPackage)
-        _jreInfo.value = checkJre()
+        // 先设置初始状态（NOT_INSTALLED），避免阻塞主线程
+        _jreInfo.value = checkJre().copy(status = JreStatus.EXTRACTING, version = selectedVersion)
+        // 异步解压内置 Java，不阻塞主线程
+        downloadScope.launch {
+            val success = extractBuiltinJava(selectedVersion, selectedPackage)
+            _jreInfo.value = checkJre()
+        }
         startDownloadService()
     }
 
     /**
-     * 从 APK 内置资源中解压指定版本的 Java。
+     * 从 APK 内置资源中解压指定版本的 Java（异步执行，不阻塞主线程）。
      * 优先尝试用户选择的包类型 (jdk/jre)，失败则回退到另一种。
      *
      * @param version Java 主版本号 (如 "8", "11", "17", "21")
      * @param pkg 包类型 ("jdk" 或 "jre")
      * @return true 如果解压成功或目标已存在
      */
-    private fun extractBuiltinJava(version: String, pkg: String): Boolean {
+    private suspend fun extractBuiltinJava(version: String, pkg: String): Boolean = withContext(Dispatchers.IO) {
         val targetDir = jreDirFor(version)
-        if (javaExecutableFor(version).exists()) return true
+        if (javaExecutableFor(version).exists()) return@withContext true
 
         val arch = getDeviceArch()
         // 尝试顺序：优先用户选择的包类型，再回退另一种
@@ -99,23 +104,54 @@ class JreManager(private val context: Context) {
         for (candidatePkg in candidates) {
             val assetName = "java-$version-$candidatePkg-$arch.tar.gz"
             try {
-                context.assets.open("bundled/$assetName").use { input ->
+                context.assets.openFd("bundled/$assetName")?.use { afd ->
+                    val total = afd.length
+                    val input = afd.createInputStream()
                     val tempFile = File(context.cacheDir, "java_builtin_${version}_$candidatePkg.tar.gz")
-                    FileOutputStream(tempFile).use { output -> input.copyTo(output) }
+                    FileOutputStream(tempFile).use { output ->
+                        val buf = ByteArray(8192)
+                        var read: Int
+                        var copied = 0L
+                        while (input.read(buf).also { read = it } != -1) {
+                            output.write(buf, 0, read)
+                            copied += read
+                            // 每 1MB 更新一次进度
+                            if (copied % (1024 * 1024) == 0L) {
+                                withContext(Dispatchers.Main) {
+                                    _jreInfo.value = _jreInfo.value.copy(
+                                        status = JreStatus.EXTRACTING,
+                                        downloadProgress = if (total > 0) copied.toFloat() / total else 0f,
+                                        downloadedBytes = copied,
+                                        totalBytes = total,
+                                        version = version
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    // 解压前最后更新一次进度
+                    withContext(Dispatchers.Main) {
+                        _jreInfo.value = _jreInfo.value.copy(
+                            status = JreStatus.EXTRACTING,
+                            downloadProgress = 1f,
+                            downloadedBytes = total,
+                            totalBytes = total,
+                            version = version
+                        )
+                    }
                     if (targetDir.exists()) targetDir.deleteRecursively()
                     targetDir.mkdirs()
                     extractTarGz(tempFile, targetDir)
                     javaExecutableFor(version).setExecutable(true)
                     tempFile.delete()
                     Log.i(TAG, "extractBuiltinJava: $assetName 解压成功")
-                    return true
+                    return@withContext true
                 }
             } catch (e: IOException) {
-                // 该包类型不存在内置资源，尝试下一个
                 Log.d(TAG, "extractBuiltinJava: $assetName 不存在或解压失败: ${e.message}")
             }
         }
-        return false
+        false
     }
 
     private fun loadPrefs() {
@@ -147,9 +183,13 @@ class JreManager(private val context: Context) {
     fun setVersionAndPackage(version: String, pkg: String) {
         selectedVersion = version; selectedPackage = pkg
         savePrefs()
-        // 尝试从内置资源解压该版本
-        extractBuiltinJava(version, pkg)
-        _jreInfo.value = checkJre()
+        // 异步尝试从内置资源解压该版本，不阻塞主线程
+        downloadScope.launch {
+            val current = _jreInfo.value
+            _jreInfo.value = current.copy(status = JreStatus.EXTRACTING, version = version)
+            extractBuiltinJava(version, pkg)
+            _jreInfo.value = checkJre()
+        }
     }
 
     // ─── 版本列表 ───

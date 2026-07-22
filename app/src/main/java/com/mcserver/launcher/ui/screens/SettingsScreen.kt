@@ -140,8 +140,8 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
-                // 下载进度
-                if ((jreInfo.status == JreStatus.DOWNLOADING || jreInfo.status == JreStatus.PAUSED) && jreInfo.totalBytes > 0) {
+                // 下载/解压进度
+                if ((jreInfo.status == JreStatus.DOWNLOADING || jreInfo.status == JreStatus.PAUSED || jreInfo.status == JreStatus.EXTRACTING) && jreInfo.totalBytes > 0) {
                     Spacer(Modifier.height(8.dp))
                     LinearProgressIndicator(progress = { jreInfo.downloadProgress }, modifier = Modifier.fillMaxWidth(),
                         color = if (jreInfo.status == JreStatus.PAUSED) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary)
