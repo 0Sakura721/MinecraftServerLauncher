@@ -76,20 +76,26 @@ jobs:
           {
             echo "TAG=${TAG}"
             echo "HAS_KEYSTORE=$([ -n \"$KEYSTORE_BASE64\" ] && echo yes || echo no)"
+            RELEASE_BUILD_OK=false
             if [ -n "$KEYSTORE_BASE64" ]; then
               echo "$KEYSTORE_BASE64" | base64 -d > release-keystore.jks
               echo "storeFile=release-keystore.jks" >> local.properties
               echo "storePassword=$KEYSTORE_PASSWORD" >> local.properties
               echo "keyAlias=$KEY_ALIAS" >> local.properties
               echo "keyPassword=$KEY_PASSWORD" >> local.properties
-              ./gradlew :app:assembleRelease --stacktrace
-              SOURCE_APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
-              APK_NAME="Kaze-SLauncher-${TAG}-release.apk"
-              echo "Uploading signed release APK: ${APK_NAME}"
-            else
+              if ./gradlew :app:assembleRelease --stacktrace; then
+                RELEASE_BUILD_OK=true
+                SOURCE_APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+                APK_NAME="Kaze-SLauncher-${TAG}-release.apk"
+                echo "Uploading signed release APK: ${APK_NAME}"
+              else
+                echo "⚠️ assembleRelease failed, falling back to debug APK"
+              fi
+            fi
+            if [ "$RELEASE_BUILD_OK" != "true" ]; then
               SOURCE_APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
               APK_NAME="Kaze-SLauncher-${TAG}-debug.apk"
-              echo "Uploading debug APK (no signing config): ${APK_NAME}"
+              echo "Uploading debug APK: ${APK_NAME}"
             fi
             echo "SOURCE_APK=${SOURCE_APK}"
             cp "$SOURCE_APK" "$APK_NAME"
