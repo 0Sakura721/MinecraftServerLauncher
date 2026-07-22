@@ -23,7 +23,6 @@ import com.mcserver.launcher.server.ProotServerManager
 import kotlinx.coroutines.launch
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FilesScreen() {
     val scope = rememberCoroutineScope()

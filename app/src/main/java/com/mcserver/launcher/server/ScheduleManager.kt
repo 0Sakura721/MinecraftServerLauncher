@@ -2,6 +2,7 @@ package com.mcserver.launcher.server
 
 import android.content.Context
 import com.mcserver.launcher.McApplication
+import com.mcserver.launcher.utils.L
 import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -31,6 +32,7 @@ import java.util.*
  */
 object ScheduleManager {
 
+    private const val TAG = "ScheduleManager"
     private val context: Context get() = McApplication.instance
     private val storageFile: File get() = File(context.filesDir, "schedules.json")
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -129,7 +131,8 @@ object ScheduleManager {
                         (weekdayMatcher(weekday) || (weekday == 0 && weekdayMatcher(7)) || (weekday == 7 && weekdayMatcher(0)))
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            L.w(TAG, "compileCron failed: $cron", e)
             null
         }
     }
@@ -155,7 +158,8 @@ object ScheduleManager {
                     createdAt = obj.optLong("createdAt", System.currentTimeMillis())
                 ))
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            L.w(TAG, "load schedules failed", e)
             _tasks.clear()
         }
     }
@@ -179,7 +183,9 @@ object ScheduleManager {
                 })
             }
             storageFile.writeText(json.toString(2))
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            L.w(TAG, "save schedules failed", e)
+        }
     }
 
     /** 添加一个定时任务 */
@@ -234,7 +240,9 @@ object ScheduleManager {
             while (isActive) {
                 try {
                     checkAndExecuteTasks()
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    L.w(TAG, "checkAndExecuteTasks failed", e)
+                }
                 delay(15000) // 每 15 秒检查一次（更精确）
             }
         }
@@ -389,7 +397,8 @@ object ScheduleManager {
                 calendar.add(Calendar.MINUTE, 1)
             }
             0 // 未找到
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            L.w(TAG, "calculateNextRun failed: $cron", e)
             0
         }
     }
@@ -477,7 +486,10 @@ object ScheduleManager {
         val m = if (minuteField == "*") "0" else minuteField
         return try {
             "${h.toInt().toString().padStart(2, '0')}:${m.toInt().toString().padStart(2, '0')}"
-        } catch (_: Exception) { "$h:$m" }
+        } catch (e: Exception) {
+            L.w(TAG, "buildTimeDesc parse failed: $h:$m", e)
+            "$h:$m"
+        }
     }
 
     private fun describeWeekday(field: String): String {

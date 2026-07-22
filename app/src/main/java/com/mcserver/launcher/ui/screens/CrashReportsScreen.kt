@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import com.mcserver.launcher.server.CrashAnalyzer
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CrashReportsScreen() {
     val scope = rememberCoroutineScope()
@@ -296,7 +295,6 @@ private fun CrashReportCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CrashReportDetailView(
     report: CrashAnalyzer.CrashReport,

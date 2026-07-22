@@ -146,7 +146,7 @@ object LinuxEnvironmentManager {
     /** 服务器工作目录（外部共享） */
     val serverDir: File
         get() {
-            val dir = File(android.os.Environment.getExternalStorageDirectory(), "mcserver")
+            val dir = File(context.getExternalFilesDir(null), "mcserver")
             dir.mkdirs()
             return dir
         }
@@ -586,7 +586,7 @@ object LinuxEnvironmentManager {
             "tuna" -> "https://mirrors.tuna.tsinghua.edu.cn/ubuntu"
             "ustc" -> "https://mirrors.ustc.edu.cn/ubuntu"
             "aliyun" -> "https://mirrors.aliyun.com/ubuntu"
-            else -> "http://ports.ubuntu.com/ubuntu-ports"  // ARM 官方源
+            else -> "https://ports.ubuntu.com/ubuntu-ports"  // ARM 官方源
         }
         val sourcesFile = File(rootfsDir, "etc/apt/sources.list")
         sourcesFile.parentFile?.mkdirs()

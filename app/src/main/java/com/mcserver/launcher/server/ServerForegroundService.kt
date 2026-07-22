@@ -14,6 +14,7 @@ import com.mcserver.launcher.MainActivity
 import com.mcserver.launcher.McApplication
 import com.mcserver.launcher.R
 import com.mcserver.launcher.data.ServerState
+import com.mcserver.launcher.utils.L
 import kotlinx.coroutines.*
 
 class ServerForegroundService : Service() {
@@ -24,6 +25,7 @@ class ServerForegroundService : Service() {
         const val ACTION_SHOW_EVENT = "com.mcserver.launcher.action.SHOW_EVENT"
         const val EXTRA_COMMAND = "com.mcserver.launcher.extra.COMMAND"
         const val NOTIFICATION_ID = 1001
+        private const val TAG = "ServerFgService"
 
         /** 标记本前台服务是否存活，供命令转发判断（避免后台启动 Service 限制） */
         @Volatile
@@ -41,7 +43,9 @@ class ServerForegroundService : Service() {
                 val cmd = intent.getStringExtra(EXTRA_COMMAND) ?: return
                 try {
                     ServerManager.instance.prootServerManager.writeCommandToPipe(cmd)
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    L.w(TAG, "commandReceiver onReceive failed", e)
+                }
             }
         }
     }
@@ -63,7 +67,7 @@ class ServerForegroundService : Service() {
         val initialNotification = NotificationCompat.Builder(this, McApplication.CHANNEL_SERVER)
             .setContentTitle("服务器正在启动...")
             .setContentText("正在准备 Minecraft 服务器")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .build()
         startForeground(NOTIFICATION_ID, initialNotification)
@@ -141,7 +145,7 @@ class ServerForegroundService : Service() {
             val notification = NotificationCompat.Builder(this, McApplication.CHANNEL_SERVER)
                 .setContentTitle(titleText)
                 .setContentText(contentText)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentIntent(pendingIntent)
                 .addAction(android.R.drawable.ic_media_pause, "停止", stopIntent)
                 .setOngoing(true)
@@ -150,7 +154,9 @@ class ServerForegroundService : Service() {
 
             val manager = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
             manager.notify(NOTIFICATION_ID, notification)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            L.w(TAG, "updateNotification failed", e)
+        }
     }
 
     fun sendEventNotification(title: String, message: String, isError: Boolean = false) {
@@ -163,14 +169,16 @@ class ServerForegroundService : Service() {
             val notification = NotificationCompat.Builder(this, McApplication.CHANNEL_NOTIFICATIONS)
                 .setContentTitle(title)
                 .setContentText(message)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
                 .setPriority(if (isError) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
                 .build()
             val manager = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
             manager.notify(System.currentTimeMillis().toInt(), notification)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            L.w(TAG, "sendEventNotification failed", e)
+        }
     }
 
     private fun formatNotificationUptime(seconds: Long): String {
@@ -188,6 +196,8 @@ class ServerForegroundService : Service() {
         isRunning = false
         updateJob?.cancel()
         serviceScope.cancel()
-        try { unregisterReceiver(commandReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(commandReceiver) } catch (e: Exception) {
+            L.w(TAG, "unregisterReceiver failed", e)
+        }
     }
 }

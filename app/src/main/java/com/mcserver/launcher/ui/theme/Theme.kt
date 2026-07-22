@@ -149,14 +149,16 @@ fun McServerTheme(
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
-            @Suppress("DEPRECATION")
-            window.statusBarColor = animatedScheme.surface.toArgb()
-            @Suppress("DEPRECATION")
-            window.navigationBarColor = animatedScheme.surface.toArgb()
-            WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = themeMode == ThemeMode.LIGHT
-                isAppearanceLightNavigationBars = themeMode == ThemeMode.LIGHT
+            val window = (view.context as? Activity)?.window
+            if (window != null) {
+                @Suppress("DEPRECATION")
+                window.statusBarColor = animatedScheme.surface.toArgb()
+                @Suppress("DEPRECATION")
+                window.navigationBarColor = animatedScheme.surface.toArgb()
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = themeMode == ThemeMode.LIGHT
+                    isAppearanceLightNavigationBars = themeMode == ThemeMode.LIGHT
+                }
             }
         }
     }

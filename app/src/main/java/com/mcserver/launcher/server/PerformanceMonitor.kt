@@ -92,7 +92,7 @@ class PerformanceMonitor private constructor() {
         lastProcessCpuTime = 0L
     }
 
-    private fun collectMetrics(): Metrics {
+    private suspend fun collectMetrics(): Metrics {
         val uptime = (System.currentTimeMillis() - startTime) / 1000
         val memInfo = collectServerMemoryInfo()
         val sysCpu = collectSystemCpuUsage()
@@ -185,10 +185,10 @@ class PerformanceMonitor private constructor() {
 
     // ─── 系统 CPU ───
 
-    private fun collectSystemCpuUsage(): Float {
+    private suspend fun collectSystemCpuUsage(): Float {
         return try {
             val stat1 = readProcStat()
-            Thread.sleep(200) // 缩短采样间隔以更快响应
+            delay(200) // 缩短采样间隔以更快响应（协程非阻塞）
             val stat2 = readProcStat()
             if (stat1 == null || stat2 == null) return 0f
 

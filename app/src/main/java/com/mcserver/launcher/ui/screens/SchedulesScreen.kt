@@ -15,7 +15,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mcserver.launcher.server.ScheduleManager
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SchedulesScreen() {
     var tasks by remember { mutableStateOf(ScheduleManager.tasks) }

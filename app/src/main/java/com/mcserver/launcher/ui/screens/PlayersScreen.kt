@@ -17,7 +17,6 @@ import com.mcserver.launcher.server.PlayerManager
 import com.mcserver.launcher.server.ServerManager
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayersScreen() {
     val serverManager = ServerManager.instance

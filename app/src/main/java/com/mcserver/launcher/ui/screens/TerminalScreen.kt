@@ -29,7 +29,6 @@ private const val MAX_LINES = 3000
 private const val TRIM_COUNT = 500
 private const val INPUT_LINE = "> "
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalScreen() {
     val context = LocalContext.current

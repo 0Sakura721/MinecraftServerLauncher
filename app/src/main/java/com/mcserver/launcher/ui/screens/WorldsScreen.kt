@@ -1,6 +1,5 @@
 package com.mcserver.launcher.ui.screens
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,7 +17,6 @@ import com.mcserver.launcher.server.ServerManager
 import com.mcserver.launcher.server.WorldManager
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorldsScreen() {
     val serverManager = ServerManager.instance
@@ -232,14 +230,10 @@ fun WorldsScreen() {
                                         scope.launch {
                                             WorldManager.exportWorld(world.name)
                                                 .onSuccess { path ->
-                                                    Toast.makeText(context,
-                                                        "世界已导出到 Downloads",
-                                                        Toast.LENGTH_LONG).show()
+                                                    message = "世界已导出到 Downloads"
                                                 }
                                                 .onFailure {
-                                                    Toast.makeText(context,
-                                                        "导出失败：${it.message}",
-                                                        Toast.LENGTH_SHORT).show()
+                                                    message = "导出失败：${it.message}"
                                                 }
                                             exportingWorld = null
                                         }

@@ -31,7 +31,6 @@ import java.util.Properties
  * - 原始文本编辑（带行号和语法高亮）
  * - 保存前备份（.bak）
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerPropertiesEditor(
     configFile: File,
@@ -154,7 +153,6 @@ fun ServerPropertiesEditor(
 
 // ─── 表单模式 ───
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PropertiesFormView(
     properties: Map<String, String>,

@@ -26,7 +26,6 @@ import com.mcserver.launcher.ui.components.ThemeSelectorCard
 import com.mcserver.launcher.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     currentTheme: ThemeMode,
@@ -398,7 +397,6 @@ fun SettingsScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun JreStatusRow(status: JreStatus, progress: Float, version: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {

@@ -3,7 +3,6 @@ package com.mcserver.launcher.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -36,7 +35,6 @@ import com.mcserver.launcher.server.ServerManager
 import androidx.compose.runtime.derivedStateOf
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConsoleScreen() {
     val serverManager = ServerManager.instance
@@ -48,6 +46,7 @@ fun ConsoleScreen() {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // 命令历史记录
     val commandHistory = remember { mutableStateListOf<String>() }
@@ -142,7 +141,7 @@ fun ConsoleScreen() {
                     val text = consoleMessages.joinToString("\n")
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("console", text))
-                    Toast.makeText(context, "已复制 ${consoleMessages.size} 行日志", Toast.LENGTH_SHORT).show()
+                    scope.launch { snackbarHostState.showSnackbar("已复制 ${consoleMessages.size} 行日志") }
                 }) {
                     Icon(Icons.Filled.ContentCopy, contentDescription = "复制日志")
                 }
@@ -165,6 +164,8 @@ fun ConsoleScreen() {
                 }
             }
         )
+
+        SnackbarHost(hostState = snackbarHostState)
 
         // 搜索栏
         if (showSearch) {
@@ -619,20 +620,14 @@ fun ConsoleScreen() {
                                             downloadsDir.mkdirs()
                                             val logFile = java.io.File(downloadsDir, fileName)
                                             logFile.writeText(filtered.joinToString("\n"))
-                                            Toast.makeText(context,
-                                                "已导出 ${filtered.size} 行日志到 Downloads/$fileName",
-                                                Toast.LENGTH_LONG).show()
+                                            scope.launch { snackbarHostState.showSnackbar("已导出 ${filtered.size} 行日志到 Downloads/$fileName") }
                                         }
                                         "server" -> {
                                             val path = com.mcserver.launcher.server.ServerManager.instance.prootServerManager.exportLogs()
                                             if (path != null) {
-                                                Toast.makeText(context,
-                                                    "服务器日志已导出到 $path",
-                                                    Toast.LENGTH_LONG).show()
+                                                scope.launch { snackbarHostState.showSnackbar("服务器日志已导出到 $path") }
                                             } else {
-                                                Toast.makeText(context,
-                                                    "导出失败：无法读取日志文件",
-                                                    Toast.LENGTH_SHORT).show()
+                                                scope.launch { snackbarHostState.showSnackbar("导出失败：无法读取日志文件") }
                                             }
                                         }
                                         "diagnostic" -> {
@@ -644,16 +639,12 @@ fun ConsoleScreen() {
                                                     serverPort = 25565
                                                 )
                                             val reportFile = com.mcserver.launcher.server.HealthChecker.exportDiagnosticReport(config)
-                                            Toast.makeText(context,
-                                                "诊断报告已导出到 ${reportFile.absolutePath}",
-                                                Toast.LENGTH_LONG).show()
+                                            scope.launch { snackbarHostState.showSnackbar("诊断报告已导出到 ${reportFile.absolutePath}") }
                                         }
                                     }
                                     showExportDialog = false
                                 } catch (e: Exception) {
-                                    Toast.makeText(context,
-                                        "导出失败：${e.message}",
-                                        Toast.LENGTH_SHORT).show()
+                                    scope.launch { snackbarHostState.showSnackbar("导出失败：${e.message}") }
                                 }
                                 exporting = false
                             }

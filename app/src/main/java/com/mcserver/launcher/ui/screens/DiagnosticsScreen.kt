@@ -17,7 +17,6 @@ import com.mcserver.launcher.data.ServerConfig
 import com.mcserver.launcher.server.*
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiagnosticsScreen(
     config: ServerConfig,

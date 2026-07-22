@@ -12,6 +12,7 @@ import com.mcserver.launcher.McApplication
 import com.mcserver.launcher.R
 import com.mcserver.launcher.data.JreInfo
 import com.mcserver.launcher.data.JreStatus
+import com.mcserver.launcher.utils.L
 import kotlinx.coroutines.*
 
 /**
@@ -28,6 +29,7 @@ class DownloadForegroundService : Service() {
     companion object {
         const val NOTIFICATION_ID = 2001
         const val ACTION_CANCEL = "com.mcserver.launcher.action.CANCEL_DOWNLOAD"
+        private const val TAG = "DownloadFgService"
 
         /** 标记本前台服务是否存活 */
         @Volatile
@@ -49,7 +51,7 @@ class DownloadForegroundService : Service() {
         val initialNotification = NotificationCompat.Builder(this, McApplication.CHANNEL_NOTIFICATIONS)
             .setContentTitle("准备下载...")
             .setContentText("正在准备 Java 运行时下载")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .build()
         startForeground(NOTIFICATION_ID, initialNotification)
@@ -136,7 +138,7 @@ class DownloadForegroundService : Service() {
             val notificationBuilder = NotificationCompat.Builder(this, McApplication.CHANNEL_NOTIFICATIONS)
                 .setContentTitle(titleText)
                 .setContentText(contentText)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentIntent(pendingIntent)
                 .setOngoing(jreInfo.status == JreStatus.DOWNLOADING || jreInfo.status == JreStatus.EXTRACTING)
                 .setOnlyAlertOnce(true)
@@ -173,7 +175,9 @@ class DownloadForegroundService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            L.w(TAG, "updateNotification failed", e)
+        }
     }
 
     override fun onDestroy() {

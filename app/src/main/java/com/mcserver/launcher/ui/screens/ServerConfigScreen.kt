@@ -31,7 +31,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerConfigScreen(
     config: ServerConfig,
@@ -483,7 +482,6 @@ fun ServerConfigScreen(
 
 // ─── 内存分配卡片 ───
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GameModeSelector(
     label: String,

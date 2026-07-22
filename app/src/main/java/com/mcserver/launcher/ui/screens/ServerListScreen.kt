@@ -16,7 +16,6 @@ import com.mcserver.launcher.data.ServerConfig
 import com.mcserver.launcher.server.ServerManager
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerListScreen(
     onBack: () -> Unit,

@@ -36,7 +36,7 @@ class ProotServerManager {
 
         /** 共享工作目录（按服务器实例分目录，使用全局 activeServerId） */
         fun serverDir(ctx: Context, serverId: String = activeServerId): File {
-            val dir = File(Environment.getExternalStorageDirectory(), "mcserver/$serverId")
+            val dir = File(ctx.getExternalFilesDir(null), "mcserver/$serverId")
             if (!dir.exists()) dir.mkdirs()
             return dir
         }
@@ -120,9 +120,14 @@ class ProotServerManager {
                     val content = comm.readText()
                     if (content.contains("java", ignoreCase = true)) return true
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                L.w(TAG, "isServerProcessAlive check failed", e)
+            }
             true
-        } catch (_: Exception) { false }
+        } catch (e: Exception) {
+            L.w(TAG, "isServerProcessAlive outer failed", e)
+            false
+        }
     }
 
     fun reconnectToRunningServer(): Boolean {
@@ -162,7 +167,9 @@ class ProotServerManager {
                 context.contentResolver.takePersistableUriPermission(
                     uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                L.w(TAG, "takePersistableUriPermission failed", e)
+            }
             var name = "server.jar"
             try {
                 context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
@@ -297,7 +304,8 @@ class ProotServerManager {
                     try {
                         serverProcess?.waitFor()
                         handleServerExit()
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        L.w(TAG, "serverProcess waitFor failed", e)
                         handleServerExit()
                     }
                 }
@@ -375,7 +383,9 @@ class ProotServerManager {
         tailJob?.cancel()
         synchronized(onlinePlayers) { onlinePlayers.clear() }
         _players.value = emptyList()
-        try { onServerExited?.invoke() } catch (_: Exception) {}
+        try { onServerExited?.invoke() } catch (e: Exception) {
+            L.w(TAG, "onServerExited callback failed", e)
+        }
     }
 
     private fun detectStartupIssues(line: String) {
@@ -497,7 +507,9 @@ class ProotServerManager {
                     emit("> RCON 不可用，使用管道发送")
                     writeCommandToPipe(cmd)
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                L.w(TAG, "sendCommandViaRcon failed", e)
+            }
         }
     }
 
@@ -527,7 +539,8 @@ class ProotServerManager {
                     emit("> RCON 连接失败，将使用管道发送命令")
                     rconClient?.disconnect()
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                L.w(TAG, "tryConnectRcon failed", e)
                 rconReady = false
             }
         }
@@ -626,7 +639,9 @@ class ProotServerManager {
         if (pipe.exists()) {
             try {
                 writeCommandToPipe("stop")
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                L.w(TAG, "stop command via pipe failed", e)
+            }
         }
 
         val stopScript = File(dir, "stop.sh")
@@ -653,7 +668,9 @@ class ProotServerManager {
                 workDir = dir.absolutePath
             )
             prootProcessBuilder.start()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            L.w(TAG, "stop script launch failed", e)
+        }
 
         effectiveScope.launch {
             delay(15000)

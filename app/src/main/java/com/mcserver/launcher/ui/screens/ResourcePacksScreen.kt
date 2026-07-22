@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.dp
 import com.mcserver.launcher.server.ResourcePackManager
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResourcePacksScreen() {
     val scope = rememberCoroutineScope()
