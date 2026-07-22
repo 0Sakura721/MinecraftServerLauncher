@@ -84,6 +84,6 @@ jobs:
             gh release upload "${TAG}" "$APK_NAME" --clobber
           else
             echo "Creating new release ${TAG}..."
-            gh release create "${TAG}" "$APK_NAME" --title "${TAG}" --notes "See commits for changes." --prerelease
+            gh release create "${TAG}" "$APK_NAME" --title "${TAG}" --generate-notes --prerelease
           fi
           echo "✅ APK uploaded to Release ${TAG}"
