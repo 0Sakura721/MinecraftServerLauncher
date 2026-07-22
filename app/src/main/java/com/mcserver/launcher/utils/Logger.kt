@@ -14,8 +14,8 @@ object L {
         if (BuildConfig.DEBUG) Log.v(tag, msg)
     }
 
-    fun d(tag: String, msg: String) {
-        if (BuildConfig.DEBUG) Log.d(tag, msg)
+    fun d(tag: String, msg: String, tr: Throwable? = null) {
+        if (BuildConfig.DEBUG) if (tr != null) Log.d(tag, msg, tr) else Log.d(tag, msg)
     }
 
     fun i(tag: String, msg: String) {
