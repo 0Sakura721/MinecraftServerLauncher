@@ -1,6 +1,8 @@
 package com.mcserver.launcher.ui.theme
 
 import android.app.Activity
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -66,7 +68,7 @@ fun McServerTheme(
     themeMode: ThemeMode = ThemeMode.DARK,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when (themeMode) {
+    val targetScheme = when (themeMode) {
         ThemeMode.LIGHT -> buildLightScheme(
             LightColors.Primary, LightColors.OnPrimary,
             LightColors.PrimaryContainer, LightColors.OnPrimaryContainer,
@@ -114,14 +116,44 @@ fun McServerTheme(
         )
     }
 
+    // 主题切换时颜色平滑过渡（300ms）
+    val animSpec = tween<Color>(durationMillis = 300)
+    val animatedScheme = targetScheme.copy(
+        primary = animateColorAsState(targetScheme.primary, animSpec, label = "primary").value,
+        onPrimary = animateColorAsState(targetScheme.onPrimary, animSpec, label = "onPrimary").value,
+        primaryContainer = animateColorAsState(targetScheme.primaryContainer, animSpec, label = "primaryContainer").value,
+        onPrimaryContainer = animateColorAsState(targetScheme.onPrimaryContainer, animSpec, label = "onPrimaryContainer").value,
+        secondary = animateColorAsState(targetScheme.secondary, animSpec, label = "secondary").value,
+        onSecondary = animateColorAsState(targetScheme.onSecondary, animSpec, label = "onSecondary").value,
+        secondaryContainer = animateColorAsState(targetScheme.secondaryContainer, animSpec, label = "secondaryContainer").value,
+        onSecondaryContainer = animateColorAsState(targetScheme.onSecondaryContainer, animSpec, label = "onSecondaryContainer").value,
+        tertiary = animateColorAsState(targetScheme.tertiary, animSpec, label = "tertiary").value,
+        onTertiary = animateColorAsState(targetScheme.onTertiary, animSpec, label = "onTertiary").value,
+        tertiaryContainer = animateColorAsState(targetScheme.tertiaryContainer, animSpec, label = "tertiaryContainer").value,
+        onTertiaryContainer = animateColorAsState(targetScheme.onTertiaryContainer, animSpec, label = "onTertiaryContainer").value,
+        background = animateColorAsState(targetScheme.background, animSpec, label = "background").value,
+        onBackground = animateColorAsState(targetScheme.onBackground, animSpec, label = "onBackground").value,
+        surface = animateColorAsState(targetScheme.surface, animSpec, label = "surface").value,
+        onSurface = animateColorAsState(targetScheme.onSurface, animSpec, label = "onSurface").value,
+        surfaceVariant = animateColorAsState(targetScheme.surfaceVariant, animSpec, label = "surfaceVariant").value,
+        onSurfaceVariant = animateColorAsState(targetScheme.onSurfaceVariant, animSpec, label = "onSurfaceVariant").value,
+        surfaceDim = animateColorAsState(targetScheme.surfaceDim, animSpec, label = "surfaceDim").value,
+        error = animateColorAsState(targetScheme.error, animSpec, label = "error").value,
+        onError = animateColorAsState(targetScheme.onError, animSpec, label = "onError").value,
+        errorContainer = animateColorAsState(targetScheme.errorContainer, animSpec, label = "errorContainer").value,
+        onErrorContainer = animateColorAsState(targetScheme.onErrorContainer, animSpec, label = "onErrorContainer").value,
+        outline = animateColorAsState(targetScheme.outline, animSpec, label = "outline").value,
+        outlineVariant = animateColorAsState(targetScheme.outlineVariant, animSpec, label = "outlineVariant").value
+    )
+
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
             @Suppress("DEPRECATION")
-            window.statusBarColor = colorScheme.surface.toArgb()
+            window.statusBarColor = animatedScheme.surface.toArgb()
             @Suppress("DEPRECATION")
-            window.navigationBarColor = colorScheme.surface.toArgb()
+            window.navigationBarColor = animatedScheme.surface.toArgb()
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = themeMode == ThemeMode.LIGHT
                 isAppearanceLightNavigationBars = themeMode == ThemeMode.LIGHT
@@ -130,7 +162,7 @@ fun McServerTheme(
     }
 
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = animatedScheme,
         typography = AppTypography,
         content = content
     )
