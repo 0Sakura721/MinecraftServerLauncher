@@ -79,8 +79,43 @@ jobs:
         run: |
           set -euxo pipefail
           TAG="${GITHUB_REF_NAME}"
+          
+          PREV_TAG=$(git tag -l "v*" --sort=-v:refname | grep -A1 "^${TAG}$" | tail -1)
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG=$(git tag -l "v*" --sort=-v:refname | head -1)
+            [ "$PREV_TAG" = "$TAG" ] && PREV_TAG=""
+          fi
+          
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log "${PREV_TAG}..${TAG}" --oneline --no-merges)
+          else
+            COMMITS=$(git log "${TAG}" --oneline --no-merges -20)
+          fi
+          
+          if [ -n "$COMMITS" ]; then
+            RELEASE_NOTES=$(cat <<EOF
+## 更新内容
+
+$(echo "$COMMITS" | sed 's/^/\- /')
+
+---
+
+*版本: ${TAG}*
+EOF
+)
+          else
+            RELEASE_NOTES="## 更新内容
+
+暂无详细更新记录。
+
+---
+
+*版本: ${TAG}*"
+          fi
+          
           {
             echo "TAG=${TAG}"
+            echo "PREV_TAG=${PREV_TAG:-none}"
             echo "HAS_KEYSTORE=$([ -n "$KEYSTORE_BASE64" ] && echo yes || echo no)"
             RELEASE_BUILD_OK=false
             if [ -n "$KEYSTORE_BASE64" ]; then
@@ -114,18 +149,21 @@ jobs:
             echo "SOURCE_APK=${SOURCE_APK}"
             echo "APK_NAME=${APK_NAME}"
             cp "$SOURCE_APK" "$APK_NAME"
+            echo "RELEASE_NOTES=$(printf '%s' "$RELEASE_NOTES" | head -20)"
             if gh release view "${TAG}" > /dev/null 2>&1; then
-              echo "Release ${TAG} exists, uploading asset..."
+              echo "Release ${TAG} exists, updating notes..."
+              echo "$RELEASE_NOTES" | gh release edit "${TAG}" --notes-file -
+              echo "Uploading asset..."
               gh release upload "${TAG}" "$APK_NAME" --clobber
             else
               echo "Creating new release ${TAG}..."
-              gh release create "${TAG}" "$APK_NAME" --title "${TAG}" --generate-notes --prerelease
+              echo "$RELEASE_NOTES" | gh release create "${TAG}" "$APK_NAME" --title "${TAG}" --notes-file - --prerelease
             fi
             echo "APK uploaded to Release ${TAG}"
-          } 2>&1 | tee /tmp/build-release.log | tail -100
+          } 2>&1 | tee /tmp/build-release.log
 
-      - name: Upload Release build log on failure
-        if: failure() && startsWith(github.ref, 'refs/tags/v')
+      - name: Upload Release build log
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v7
         with:
           name: build-release-log
