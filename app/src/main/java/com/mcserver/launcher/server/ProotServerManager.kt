@@ -265,7 +265,7 @@ class ProotServerManager {
 
                 val script = buildString {
                     appendLine("#!/bin/sh")
-                    appendLine("cd '$safeServerDir'")
+                    appendLine("cd '$safeServerDir' || exit 1")
                     appendLine("rm -f '$safePipePath'")
                     appendLine("mkfifo '$safePipePath'")
                     appendLine("echo '--- Minecraft Server Started ---' > '$safeLogPath'")
@@ -381,6 +381,7 @@ class ProotServerManager {
         _stateChanged.tryEmit(false)
         emit("> 服务器进程已退出")
         tailJob?.cancel()
+        disconnectRcon()
         synchronized(onlinePlayers) { onlinePlayers.clear() }
         _players.value = emptyList()
         try { onServerExited?.invoke() } catch (e: Exception) {
@@ -396,10 +397,27 @@ class ProotServerManager {
                 emit("> 错误：JAR 文件损坏，请重新选择/下载服务器核心")
             line.contains("UnsupportedClassVersionError") ->
                 emit("> 错误：JAR 要求的 Java 版本高于当前运行环境，请在设置页切到更高版本 JRE")
-            line.contains("You need to agree to the EULA") ->
+            line.contains("You need to agree to the EULA") -> {
                 emit("> 错误：EULA 未被接受，正在自动写入 eula=true 后重试")
+                forceWriteEula()
+            }
             line.contains("java.lang.OutOfMemoryError") ->
                 emit("> 错误：内存不足（OOM），请在配置页降低内存分配或关闭其他应用")
+        }
+    }
+
+    private fun forceWriteEula() {
+        try {
+            val dir = serverDir()
+            val eula = File(dir, "eula.txt")
+            eula.writeText(
+                "# Minecraft EULA 由 MCServer Launcher 自动接受\n" +
+                "# 详见 https://aka.ms/MinecraftEULA\n" +
+                "eula=true\n"
+            )
+            emit("> 已强制写入 eula=true，服务器退出后将自动重试")
+        } catch (e: Exception) {
+            emit("> EULA 写入失败：${e.message}")
         }
     }
 

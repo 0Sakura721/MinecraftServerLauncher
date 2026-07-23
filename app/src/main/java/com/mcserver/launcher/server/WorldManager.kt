@@ -158,9 +158,10 @@ object WorldManager {
                 return@withContext Result.failure(Exception("世界不存在或已损坏"))
             }
 
-            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
+            val context = McApplication.instance
+            val downloadsDir = context.getExternalFilesDir(
                 android.os.Environment.DIRECTORY_DOWNLOADS
-            )
+            ) ?: throw Exception("无法获取下载目录")
             downloadsDir.mkdirs()
 
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())

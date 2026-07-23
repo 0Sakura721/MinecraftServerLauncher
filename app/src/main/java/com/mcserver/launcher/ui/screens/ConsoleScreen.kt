@@ -615,12 +615,13 @@ fun ConsoleScreen() {
                                             val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
                                                 .format(java.util.Date())
                                             val fileName = "mcserver_console_$timestamp.log"
-                                            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
+                                            val downloadsDir = context.getExternalFilesDir(
                                                 android.os.Environment.DIRECTORY_DOWNLOADS)
+                                                ?: throw Exception("无法获取下载目录")
                                             downloadsDir.mkdirs()
                                             val logFile = java.io.File(downloadsDir, fileName)
                                             logFile.writeText(filtered.joinToString("\n"))
-                                            scope.launch { snackbarHostState.showSnackbar("已导出 ${filtered.size} 行日志到 Downloads/$fileName") }
+                                            scope.launch { snackbarHostState.showSnackbar("已导出 ${filtered.size} 行日志到 ${logFile.absolutePath}") }
                                         }
                                         "server" -> {
                                             val path = com.mcserver.launcher.server.ServerManager.instance.prootServerManager.exportLogs()

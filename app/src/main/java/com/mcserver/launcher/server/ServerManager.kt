@@ -182,10 +182,75 @@ class ServerManager private constructor(private val context: Context) {
                 return
             }
 
+            // 获取当前服务器配置
+            val config = preferencesManager.serverConfig.first()
+            lastConfig = config
+
             // 尝试恢复连接
             delay(1000) // 给 Linux 环境一点时间
             val reconnected = prootServerManager.reconnectToRunningServer()
             if (reconnected) {
+                // 恢复 onServerExited 回调
+                prootServerManager.onServerExited = {
+                    serverScope.launch {
+                        if (!exitHandled.compareAndSet(false, true)) {
+                            return@launch
+                        }
+                        isLaunching.set(false)
+                        if (manualStop.get()) {
+                            restartCount.set(0)
+                            lastExitTime.set(0L)
+                            ServerStateManager.onServerStopped()
+                            transitionState(ServerState.STOPPED)
+                            stopUptime()
+                            stopForeground()
+                            McApplication.showServerEventNotification("服务器已停止", "Minecraft 服务器已正常停止")
+                        } else {
+                            val max = config.maxRestarts
+                            val currentCount = restartCount.get()
+                            val triggered = max > 0 && currentCount >= max
+                            if (config.autoRestart && !triggered) {
+                                val exitTime = System.currentTimeMillis()
+                                val cooldownMs = config.restartCooldownSec * 1000L
+                                val lastExit = lastExitTime.get()
+                                if (lastExit > 0) {
+                                    val elapsed = exitTime - lastExit
+                                    if (elapsed < cooldownMs) {
+                                        delay(cooldownMs - elapsed)
+                                    }
+                                }
+                                lastExitTime.set(System.currentTimeMillis())
+                                val newCount = restartCount.incrementAndGet()
+                                prootServerManager.notifyConsole(
+                                    "> 检测到服务器退出，第 $newCount 次自动重启（最多 $max 次）"
+                                )
+                                McApplication.showServerEventNotification(
+                                    "服务器异常退出", "正在第 $newCount 次自动重启...", isError = true
+                                )
+                                exitHandled.set(false)
+                                isLaunching.set(false)
+                                launchServer(config)
+                            } else {
+                                if (triggered) {
+                                    prootServerManager.notifyConsole(
+                                        "> 已连续崩溃 $currentCount 次，超过上限 $max，停止自动重启。" +
+                                        "请检查日志排查原因。"
+                                    )
+                                }
+                                lastExitTime.set(0L)
+                                restartCount.set(0)
+                                ServerStateManager.onServerCrashed()
+                                transitionState(ServerState.STOPPED)
+                                stopUptime()
+                                stopForeground()
+                                McApplication.showServerEventNotification(
+                                    "服务器已崩溃", "服务器异常退出，已停止运行。请检查日志。", isError = true
+                                )
+                            }
+                        }
+                    }
+                }
+
                 if (transitionState(ServerState.RUNNING)) {
                     _serverStatus.value = ServerStatus(
                         state = ServerState.RUNNING,
@@ -195,6 +260,10 @@ class ServerManager private constructor(private val context: Context) {
                 PerformanceMonitor.instance.startMonitoring()
                 startUptime()
                 startForeground()
+                // 恢复 RCON 连接
+                if (config.rconEnabled) {
+                    prootServerManager.tryConnectRcon(config)
+                }
             } else {
                 ServerStateManager.save(ServerStateManager.PersistentState())
             }
