@@ -1,5 +1,6 @@
 package com.mcserver.launcher.server
 
+import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import com.mcserver.launcher.McApplication
@@ -26,7 +27,22 @@ import java.util.jar.JarFile
 object HealthChecker {
 
     private val context: Context get() = McApplication.instance
-    private val serverDir: File get() = ProotServerManager.serverDir(context)
+
+    /** 获取指定服务器实例的工作目录（多实例隔离） */
+    private fun serverDir(config: ServerConfig): File =
+        ProotServerManager.serverDir(context, config.id)
+
+    /** 获取设备物理总内存（MB） */
+    private fun getDeviceTotalMemoryMB(): Long {
+        return try {
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val memoryInfo = ActivityManager.MemoryInfo()
+            activityManager.getMemoryInfo(memoryInfo)
+            memoryInfo.totalMem / (1024 * 1024)
+        } catch (e: Exception) {
+            Runtime.getRuntime().maxMemory() / (1024 * 1024)
+        }
+    }
 
     data class HealthResult(
         val passed: Boolean,
@@ -63,7 +79,7 @@ object HealthChecker {
         checks.add(checkPortAvailable(config.serverPort))
 
         // 4. 磁盘空间检查
-        val diskCheck = checkDiskSpace()
+        val diskCheck = checkDiskSpace(config)
         checks.add(diskCheck)
         if (diskCheck.severity == Severity.WARNING) warnings.add(diskCheck.message)
 
@@ -73,7 +89,7 @@ object HealthChecker {
         if (memCheck.severity == Severity.WARNING) warnings.add(memCheck.message)
 
         // 6. EULA 检查
-        checks.add(checkEula())
+        checks.add(checkEula(config))
 
         // 7. Java 版本兼容性
         val javaCheck = checkJavaCompatibility(config)
@@ -88,7 +104,7 @@ object HealthChecker {
         }
 
         // 9. 服务器目录权限
-        checks.add(checkDirectoryWritable())
+        checks.add(checkDirectoryWritable(config))
 
         val allPassed = checks.none { !it.passed && it.severity == Severity.ERROR }
 
@@ -123,13 +139,14 @@ object HealthChecker {
     }
 
     /** 检查服务器目录是否可写 */
-    private fun checkDirectoryWritable(): HealthCheck {
+    private fun checkDirectoryWritable(config: ServerConfig): HealthCheck {
         return try {
-            val testFile = File(serverDir, ".healthcheck_test")
+            val dir = serverDir(config)
+            val testFile = File(dir, ".healthcheck_test")
             testFile.writeText("test")
             testFile.delete()
             HealthCheck("目录权限", true,
-                "服务器目录可读写 (${serverDir.absolutePath})", Severity.INFO)
+                "服务器目录可读写 (${dir.absolutePath})", Severity.INFO)
         } catch (e: Exception) {
             HealthCheck("目录权限", false,
                 "服务器目录不可写：${e.message}",
@@ -140,8 +157,8 @@ object HealthChecker {
     /** 系统资源综合评估 */
     private fun checkSystemResources(config: ServerConfig): HealthCheck {
         val runtime = Runtime.getRuntime()
-        val deviceTotalMB = runtime.maxMemory() / (1024 * 1024)
-        val freeStorage = serverDir.freeSpace / (1024 * 1024)
+        val deviceTotalMB = getDeviceTotalMemoryMB()
+        val freeStorage = serverDir(config).freeSpace / (1024 * 1024)
         val cpuCores = runtime.availableProcessors()
 
         val issues = mutableListOf<String>()
@@ -171,8 +188,7 @@ object HealthChecker {
     /** 根据设备和配置生成推荐设置 */
     private fun generateRecommendations(config: ServerConfig): List<String> {
         val recs = mutableListOf<String>()
-        val runtime = Runtime.getRuntime()
-        val deviceTotalMB = runtime.maxMemory() / (1024 * 1024)
+        val deviceTotalMB = getDeviceTotalMemoryMB()
 
         // 内存推荐
         val recommendedMem = when {
@@ -215,7 +231,7 @@ object HealthChecker {
         val jarFile = File(config.jarPath)
         if (!jarFile.exists()) {
             val name = jarFile.name
-            val inServerDir = File(serverDir, name)
+            val inServerDir = File(serverDir(config), name)
             if (inServerDir.exists() && inServerDir.isFile) {
                 return checkJarIntegrity(inServerDir)
             }
@@ -269,8 +285,8 @@ object HealthChecker {
         }
     }
 
-    private fun checkDiskSpace(): HealthCheck {
-        val freeSpace = serverDir.freeSpace
+    private fun checkDiskSpace(config: ServerConfig): HealthCheck {
+        val freeSpace = serverDir(config).freeSpace
         val freeMB = freeSpace / (1024 * 1024)
         return when {
             freeMB < 100 -> HealthCheck("磁盘空间", false,
@@ -285,26 +301,48 @@ object HealthChecker {
     }
 
     private fun checkMemoryAllocation(config: ServerConfig): HealthCheck {
-        val runtime = Runtime.getRuntime()
-        val deviceTotalMB = (runtime.maxMemory() / (1024 * 1024)).toInt()
         val requested = config.allocatedMemoryMB
 
+        // 1) App 堆内存上限
+        val runtime = Runtime.getRuntime()
+        val heapMaxMB = (runtime.maxMemory() / (1024 * 1024)).toInt()
+
+        // 2) 设备物理总内存
+        val deviceTotalMB = getDeviceTotalMemoryMB().toInt()
+
         return when {
-            requested > deviceTotalMB -> HealthCheck("内存分配", false,
-                "请求内存 ${requested}MB 超过可用内存 ${deviceTotalMB}MB",
-                detail = "请将内存分配降低至 ${deviceTotalMB}MB 以下。")
-            requested > deviceTotalMB * 0.8 -> HealthCheck("内存分配", true,
-                "内存分配 ${requested}MB 偏高（可用 ${deviceTotalMB}MB），可能影响系统稳定性",
+            requested > deviceTotalMB -> HealthCheck(
+                "内存分配", false,
+                "请求内存 ${requested}MB 超过设备总内存 ${deviceTotalMB}MB",
+                detail = "App 堆内存上限约 ${heapMaxMB}MB，设备物理内存约 ${deviceTotalMB}MB。请将分配降至 ${deviceTotalMB}MB 以下。"
+            )
+            requested > heapMaxMB -> HealthCheck(
+                "内存分配", false,
+                "请求内存 ${requested}MB 超过应用堆内存上限 ${heapMaxMB}MB",
+                detail = "Android 给本应用分配的 Java 堆上限为 ${heapMaxMB}MB，设备物理内存为 ${deviceTotalMB}MB。请降低至 ${heapMaxMB}MB 以下，或在 AndroidManifest 中启用 largeHeap。"
+            )
+            requested > deviceTotalMB * 0.8 -> HealthCheck(
+                "内存分配", true,
+                "内存分配 ${requested}MB 偏高（设备 ${deviceTotalMB}MB / 堆上限 ${heapMaxMB}MB）",
                 Severity.WARNING,
-                detail = "建议分配不超过可用内存的 70%。")
-            else -> HealthCheck("内存分配", true,
-                "内存分配 ${requested}MB 合理（设备总内存 ${deviceTotalMB}MB）",
-                Severity.INFO)
+                detail = "建议分配不超过设备物理内存的 70%，避免影响系统稳定性。"
+            )
+            requested > heapMaxMB * 0.8 -> HealthCheck(
+                "内存分配", true,
+                "内存分配 ${requested}MB 接近应用堆上限 ${heapMaxMB}MB",
+                Severity.WARNING,
+                detail = "建议预留 20% 堆内存给 JVM 元数据、JIT 和 Native 开销。"
+            )
+            else -> HealthCheck(
+                "内存分配", true,
+                "内存分配 ${requested}MB 合理（堆上限 ${heapMaxMB}MB / 设备 ${deviceTotalMB}MB）",
+                Severity.INFO
+            )
         }
     }
 
-    private fun checkEula(): HealthCheck {
-        val eulaFile = File(serverDir, "eula.txt")
+    private fun checkEula(config: ServerConfig): HealthCheck {
+        val eulaFile = File(serverDir(config), "eula.txt")
         if (!eulaFile.exists()) {
             return HealthCheck("EULA", true,
                 "EULA 将在首次启动时自动接受",
@@ -408,12 +446,12 @@ object HealthChecker {
         sb.appendLine()
 
         // 存储信息
-        val serverDir = serverDir
-        val totalSpace = serverDir.totalSpace / (1024 * 1024)
-        val freeSpace = serverDir.freeSpace / (1024 * 1024)
-        val usableSpace = serverDir.usableSpace / (1024 * 1024)
+        val srvDir = serverDir(config)
+        val totalSpace = srvDir.totalSpace / (1024 * 1024)
+        val freeSpace = srvDir.freeSpace / (1024 * 1024)
+        val usableSpace = srvDir.usableSpace / (1024 * 1024)
         sb.appendLine("--- 存储信息 ---")
-        sb.appendLine("  服务器目录: ${serverDir.absolutePath}")
+        sb.appendLine("  服务器目录: ${srvDir.absolutePath}")
         sb.appendLine("  分区总空间: ${formatFileSize(totalSpace * 1024 * 1024)}")
         sb.appendLine("  可用空间: ${formatFileSize(usableSpace * 1024 * 1024)}")
         sb.appendLine("  空闲空间: ${formatFileSize(freeSpace * 1024 * 1024)}")
@@ -467,8 +505,8 @@ object HealthChecker {
 
         // 服务器目录内容
         sb.appendLine("--- 服务器目录 ---")
-        if (serverDir.exists()) {
-            serverDir.listFiles()?.sortedBy { it.name }?.forEach { file ->
+        if (srvDir.exists()) {
+            srvDir.listFiles()?.sortedBy { it.name }?.forEach { file ->
                 val type = when {
                     file.isDirectory -> "[DIR]"
                     file.extension == "jar" -> "[JAR]"
@@ -513,7 +551,7 @@ object HealthChecker {
     fun exportDiagnosticReport(config: ServerConfig): File {
         val report = generateDiagnosticReport(config)
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val reportDir = File(serverDir, "diagnostics")
+        val reportDir = File(serverDir(config), "diagnostics")
         reportDir.mkdirs()
         val reportFile = File(reportDir, "diagnostic_$timestamp.txt")
         reportFile.writeText(report)
