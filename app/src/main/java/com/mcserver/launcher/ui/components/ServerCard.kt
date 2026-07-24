@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mcserver.launcher.data.ServerState
 import com.mcserver.launcher.data.ServerStatus
+import com.mcserver.launcher.ui.theme.extendedColorScheme
 
 @Composable
 fun ServerStatusCard(
@@ -21,14 +22,17 @@ fun ServerStatusCard(
     onStop: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val extendedColors = extendedColorScheme()
+
     Card(
         modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = MaterialTheme.shapes.large,
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            // 状态指示器
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -49,7 +53,6 @@ fun ServerStatusCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 运行信息
             if (status.state == ServerState.RUNNING) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -61,7 +64,6 @@ fun ServerStatusCard(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 在线玩家
                 if (status.players.isNotEmpty()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -70,7 +72,7 @@ fun ServerStatusCard(
                         Icon(
                             Icons.Filled.People,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = extendedColors.online,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -84,7 +86,6 @@ fun ServerStatusCard(
                 }
             }
 
-            // 操作按钮
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -92,10 +93,7 @@ fun ServerStatusCard(
                 if (status.state == ServerState.STOPPED || status.state == ServerState.ERROR) {
                     Button(
                         onClick = onStart,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
+                        modifier = Modifier.weight(1f)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PlayArrow,
@@ -110,7 +108,7 @@ fun ServerStatusCard(
                         onClick = onStop,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
+                            contentColor = extendedColors.error
                         )
                     ) {
                         Icon(
@@ -129,12 +127,13 @@ fun ServerStatusCard(
 
 @Composable
 private fun StatusDot(state: ServerState) {
+    val extendedColors = extendedColorScheme()
     val color = when (state) {
-        ServerState.STOPPED -> Color(0xFF9E9E9E)
-        ServerState.STARTING -> Color(0xFFFFC107)
-        ServerState.RUNNING -> Color(0xFF4CAF50)
-        ServerState.STOPPING -> Color(0xFFFF9800)
-        ServerState.ERROR -> Color(0xFFF44336)
+        ServerState.STOPPED -> extendedColors.offline
+        ServerState.STARTING -> extendedColors.warning
+        ServerState.RUNNING -> extendedColors.online
+        ServerState.STOPPING -> extendedColors.warning
+        ServerState.ERROR -> extendedColors.error
     }
     Surface(
         modifier = Modifier.size(12.dp),

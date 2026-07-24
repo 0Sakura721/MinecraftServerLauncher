@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mcserver.launcher.data.ServerState
 import com.mcserver.launcher.server.ServerManager
+import com.mcserver.launcher.ui.theme.ExtendedColorScheme
+import com.mcserver.launcher.ui.theme.extendedColorScheme
 import androidx.compose.runtime.derivedStateOf
 import kotlinx.coroutines.launch
 
@@ -47,32 +48,26 @@ fun ConsoleScreen() {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val extendedColors = extendedColorScheme()
 
-    // 命令历史记录
     val commandHistory = remember { mutableStateListOf<String>() }
     var historyIndex by remember { mutableIntStateOf(-1) }
     var savedInputBeforeHistory by remember { mutableStateOf("") }
 
-    // 搜索/过滤
     var showSearch by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var filterLevel by remember { mutableStateOf("all") } // all, error, warn, info, chat, command
+    var filterLevel by remember { mutableStateOf("all") }
 
-    // 快速命令面板
     var showQuickCommands by remember { mutableStateOf(false) }
-
-    // 命令历史面板
     var showHistory by remember { mutableStateOf(false) }
 
-    // 导出日志
     var showExportDialog by remember { mutableStateOf(false) }
-    var exportType by remember { mutableStateOf("console") } // console, server, diagnostic
+    var exportType by remember { mutableStateOf("console") }
     var exportFilter by remember { mutableStateOf("all") }
     var exportFromLine by remember { mutableStateOf("0") }
     var exportToLine by remember { mutableStateOf("") }
     var exporting by remember { mutableStateOf(false) }
 
-    // 收集控制台输出
     LaunchedEffect(Unit) {
         serverManager.consoleOutput.collect { line ->
             consoleMessages.add(line)
@@ -82,7 +77,6 @@ fun ConsoleScreen() {
         }
     }
 
-    // 用户滚动时判断是否停留在底部
     val stickToBottomState = remember {
         derivedStateOf {
             val idx = listState.firstVisibleItemIndex
@@ -94,14 +88,12 @@ fun ConsoleScreen() {
         stickToBottom = stickToBottomState.value
     }
 
-    // 自动滚动到底部
     LaunchedEffect(consoleMessages.size) {
         if (consoleMessages.isNotEmpty() && stickToBottom) {
             listState.animateScrollToItem(consoleMessages.size - 1)
         }
     }
 
-    // 过滤后的消息
     val filteredMessages = remember(consoleMessages, filterLevel, searchQuery) {
         derivedStateOf {
             consoleMessages.filter { msg ->
@@ -121,22 +113,21 @@ fun ConsoleScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // 顶部栏
         TopAppBar(
             title = { Text("控制台") },
             actions = {
-                // 快速命令
                 IconButton(onClick = { showQuickCommands = !showQuickCommands }) {
                     Icon(Icons.Filled.SmartButton, contentDescription = "快速命令")
                 }
-                // 搜索
-                IconButton(onClick = { showSearch = !showSearch; if (!showSearch) { searchQuery = ""; filterLevel = "all" } }) {
+                IconButton(onClick = {
+                    showSearch = !showSearch
+                    if (!showSearch) { searchQuery = ""; filterLevel = "all" }
+                }) {
                     Icon(
                         if (showSearch) Icons.Filled.SearchOff else Icons.Filled.Search,
                         contentDescription = "搜索"
                     )
                 }
-                // 复制
                 IconButton(onClick = {
                     val text = consoleMessages.joinToString("\n")
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -145,29 +136,32 @@ fun ConsoleScreen() {
                 }) {
                     Icon(Icons.Filled.ContentCopy, contentDescription = "复制日志")
                 }
-                // 导出
                 IconButton(onClick = {
                     exportToLine = consoleMessages.size.toString()
                     showExportDialog = true
                 }) {
                     Icon(Icons.Filled.FileDownload, contentDescription = "导出日志")
                 }
-                // 清除
                 IconButton(onClick = { consoleMessages.clear() }) {
                     Icon(Icons.Filled.DeleteSweep, contentDescription = "清除")
                 }
-                // 停止按钮
                 if (serverStatus.state == ServerState.RUNNING) {
                     IconButton(onClick = { serverManager.stopServer() }) {
-                        Icon(Icons.Filled.Stop, contentDescription = "停止", tint = MaterialTheme.colorScheme.error)
+                        Icon(
+                            Icons.Filled.Stop,
+                            contentDescription = "停止",
+                            tint = extendedColors.warning
+                        )
                     }
                 }
-            }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+            )
         )
 
         SnackbarHost(hostState = snackbarHostState)
 
-        // 搜索栏
         if (showSearch) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -219,14 +213,17 @@ fun ConsoleScreen() {
             }
         }
 
-        // 快速命令面板
         if (showQuickCommands && serverStatus.state == ServerState.RUNNING) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 tonalElevation = 2.dp
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("快速命令", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
+                    Text(
+                        "快速命令",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium
+                    )
                     Spacer(Modifier.height(6.dp))
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -277,7 +274,6 @@ fun ConsoleScreen() {
             }
         }
 
-        // 控制台输出区
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -287,7 +283,7 @@ fun ConsoleScreen() {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(Color(0xFF0D1117))
                     .padding(12.dp)
             ) {
@@ -299,11 +295,19 @@ fun ConsoleScreen() {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "控制台输出将显示在这里",
-                                style = TextStyle(color = Color(0xFF666666), fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                                style = TextStyle(
+                                    color = Color(0xFF666666),
+                                    fontSize = 14.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
                             )
                             Text(
                                 text = "启动服务器以查看日志",
-                                style = TextStyle(color = Color(0xFF555555), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                                style = TextStyle(
+                                    color = Color(0xFF555555),
+                                    fontSize = 12.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
                             )
                         }
                     }
@@ -314,14 +318,18 @@ fun ConsoleScreen() {
                     ) {
                         Text(
                             text = "没有匹配的日志",
-                            style = TextStyle(color = Color(0xFF666666), fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                            style = TextStyle(
+                                color = Color(0xFF666666),
+                                fontSize = 14.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
                         )
                     }
                 } else {
                     LazyColumn(state = listState) {
                         items(filteredMessages.value.size) { index ->
                             val message = filteredMessages.value[index]
-                            val color = getConsoleLineColor(message)
+                            val color = getConsoleLineColor(message, extendedColors)
                             val background = if (index % 2 == 0) Color.Transparent else Color(0xFF161B22)
                             Text(
                                 text = message,
@@ -334,13 +342,12 @@ fun ConsoleScreen() {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(background)
-                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
                     }
                 }
             }
-            // 「回到底部」按钮
             if (!stickToBottom && filteredMessages.value.isNotEmpty()) {
                 FloatingActionButton(
                     onClick = {
@@ -350,16 +357,18 @@ fun ConsoleScreen() {
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(12.dp),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ) {
-                    Icon(Icons.Filled.ArrowDownward, contentDescription = "回到底部", tint = MaterialTheme.colorScheme.primary)
+                    Icon(
+                        Icons.Filled.ArrowDownward,
+                        contentDescription = "回到底部"
+                    )
                 }
             }
         }
 
-        // 命令输入区
         if (serverStatus.state == ServerState.RUNNING) {
-            // 命令历史面板
             if (showHistory && commandHistory.isNotEmpty()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
@@ -389,7 +398,10 @@ fun ConsoleScreen() {
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         cmd,
-                                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                                        style = TextStyle(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 13.sp
+                                        ),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -409,7 +421,6 @@ fun ConsoleScreen() {
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 历史按钮
                     IconButton(
                         onClick = { showHistory = !showHistory },
                         enabled = commandHistory.isNotEmpty()
@@ -417,8 +428,10 @@ fun ConsoleScreen() {
                         Icon(
                             Icons.Filled.History,
                             contentDescription = "历史",
-                            tint = if (commandHistory.isNotEmpty()) MaterialTheme.colorScheme.primary
-                                   else MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = if (commandHistory.isNotEmpty())
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Icon(
@@ -460,7 +473,6 @@ fun ConsoleScreen() {
                             if (commandInput.isNotBlank()) {
                                 val cmd = commandInput.trim()
                                 serverManager.sendCommand(cmd)
-                                // 添加到历史记录（去重，最多 100 条）
                                 commandHistory.removeAll { it == cmd }
                                 commandHistory.add(cmd)
                                 if (commandHistory.size > 100) {
@@ -480,7 +492,6 @@ fun ConsoleScreen() {
                 }
             }
         } else {
-            // 未运行时显示提示
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 tonalElevation = 3.dp
@@ -508,15 +519,19 @@ fun ConsoleScreen() {
             }
         }
 
-        // 导出日志对话框
         if (showExportDialog) {
             AlertDialog(
                 onDismissRequest = { showExportDialog = false },
-                icon = { Icon(Icons.Filled.FileDownload, null, tint = MaterialTheme.colorScheme.primary) },
+                icon = {
+                    Icon(
+                        Icons.Filled.FileDownload,
+                        null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
                 title = { Text("导出") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // 导出类型选择
                         Text("导出类型：", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             listOf(
@@ -534,13 +549,18 @@ fun ConsoleScreen() {
 
                         when (exportType) {
                             "console" -> {
-                                Text("将控制台日志导出为 .log 文件到下载目录。",
+                                Text(
+                                    "将控制台日志导出为 .log 文件到下载目录。",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text("日志级别过滤：", style = MaterialTheme.typography.bodySmall)
                                     Spacer(Modifier.width(8.dp))
-                                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        Modifier.horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
                                         listOf("all" to "全部", "error" to "错误", "warn" to "警告", "info" to "信息", "chat" to "聊天").forEach { (k, v) ->
                                             FilterChip(
                                                 selected = exportFilter == k,
@@ -569,25 +589,35 @@ fun ConsoleScreen() {
                                         enabled = !exporting
                                     )
                                 }
-                                Text("共 ${consoleMessages.size} 行日志",
+                                Text(
+                                    "共 ${consoleMessages.size} 行日志",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                             "server" -> {
-                                Text("导出服务器原始日志文件（server.log、latest.log、崩溃报告等）。",
+                                Text(
+                                    "导出服务器原始日志文件（server.log、latest.log、崩溃报告等）。",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("导出路径: /mcserver/exports/",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    "导出路径: /mcserver/exports/",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.tertiary)
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
                             }
                             "diagnostic" -> {
-                                Text("生成完整的系统诊断报告，包含设备信息、服务器配置、健康检查结果等。",
+                                Text(
+                                    "生成完整的系统诊断报告，包含设备信息、服务器配置、健康检查结果等。",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("导出路径: /mcserver/diagnostics/",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    "导出路径: /mcserver/diagnostics/",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.tertiary)
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
                             }
                         }
                     }
@@ -621,10 +651,12 @@ fun ConsoleScreen() {
                                             downloadsDir.mkdirs()
                                             val logFile = java.io.File(downloadsDir, fileName)
                                             logFile.writeText(filtered.joinToString("\n"))
-                                            scope.launch { snackbarHostState.showSnackbar("已导出 ${filtered.size} 行日志到 ${logFile.absolutePath}") }
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("已导出 ${filtered.size} 行日志到 ${logFile.absolutePath}")
+                                            }
                                         }
                                         "server" -> {
-                                            val path = com.mcserver.launcher.server.ServerManager.instance.prootServerManager.exportLogs()
+                                            val path = ServerManager.instance.prootServerManager.exportLogs()
                                             if (path != null) {
                                                 scope.launch { snackbarHostState.showSnackbar("服务器日志已导出到 $path") }
                                             } else {
@@ -632,8 +664,7 @@ fun ConsoleScreen() {
                                             }
                                         }
                                         "diagnostic" -> {
-                                            // 使用 ServerManager 中最后使用的配置，或提供一个合理的默认值
-                                            val config = com.mcserver.launcher.server.ServerManager.instance.currentConfig
+                                            val config = ServerManager.instance.currentConfig
                                                 ?: com.mcserver.launcher.data.ServerConfig(
                                                     jarPath = "",
                                                     allocatedMemoryMB = 2048,
@@ -667,19 +698,18 @@ fun ConsoleScreen() {
     }
 }
 
-/** 根据日志内容返回对应颜色（终端风格高亮） */
-private fun getConsoleLineColor(message: String): Color {
+private fun getConsoleLineColor(message: String, colors: ExtendedColorScheme): Color {
     return when {
         message.startsWith("> ") -> Color(0xFF58A6FF)
-        message.contains("FATAL") || message.contains("Exception") -> Color(0xFFFF6B6B)
-        message.contains("ERROR") || message.contains("Error") -> Color(0xFFF85149)
-        message.contains("WARN") || message.contains("Warn") -> Color(0xFFD29922)
+        message.contains("FATAL") || message.contains("Exception") -> colors.error
+        message.contains("ERROR") || message.contains("Error") -> colors.error
+        message.contains("WARN") || message.contains("Warn") -> colors.warning
         message.contains("INFO") || message.contains("Info") -> Color(0xFF58A6FF)
         message.contains("DEBUG") || message.contains("Debug") -> Color(0xFF8B949E)
-        message.contains("joined the game") -> Color(0xFF7EE787)
-        message.contains("left the game") -> Color(0xFFF85149)
-        message.contains("<") && message.contains(">") -> Color(0xFFE6EDF3)  // 聊天消息
-        message.contains("Done") || message.contains("done") -> Color(0xFF7EE787)
+        message.contains("joined the game") -> colors.success
+        message.contains("left the game") -> colors.error
+        message.contains("<") && message.contains(">") -> Color(0xFFE6EDF3)
+        message.contains("Done") || message.contains("done") -> colors.success
         message.contains("Starting") || message.contains("Loading") -> Color(0xFF79C0FF)
         message.contains("Saved") || message.contains("saved") -> Color(0xFFA5D6FF)
         else -> Color(0xFFC9D1D9)

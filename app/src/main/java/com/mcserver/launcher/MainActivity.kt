@@ -7,14 +7,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
-import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -41,11 +45,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // 绑定权限助手
         PermissionHelper.bind(this)
         notificationLauncher = PermissionHelper.createNotificationLauncher(this)
 
-        // Android 13+ 启动时尝试请求通知权限
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             PermissionHelper.shouldRequestNotificationPermission(this)
         ) {
@@ -105,7 +107,6 @@ fun MainApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    // 判断是否在管理子页面（显示返回按钮而非底部导航）
     val isSubScreen = currentDestination?.route in listOf(
         Screen.ServerConfig.route, Screen.Plugins.route,
         Screen.Players.route, Screen.Files.route,
@@ -117,20 +118,82 @@ fun MainApp(
         Screen.ServerList.route
     )
 
+    val currentTitle = when (currentDestination?.route) {
+        Screen.Home.route -> "首页"
+        Screen.Console.route -> "控制台"
+        Screen.Management.route -> "管理"
+        Screen.Settings.route -> "设置"
+        Screen.ServerConfig.route -> "服务器配置"
+        Screen.Plugins.route -> "插件管理"
+        Screen.Players.route -> "玩家管理"
+        Screen.Files.route -> "文件管理"
+        Screen.Backups.route -> "备份恢复"
+        Screen.CoreDownload.route -> "下载核心"
+        Screen.Modrinth.route -> "Modrinth"
+        Screen.ResourcePacks.route -> "资源包"
+        Screen.Schedules.route -> "定时任务"
+        Screen.Worlds.route -> "世界管理"
+        Screen.Diagnostics.route -> "诊断报告"
+        Screen.CrashReports.route -> "崩溃报告"
+        Screen.Appearance.route -> "外观"
+        Screen.Terminal.route -> "Linux 终端"
+        Screen.ServerList.route -> "服务器列表"
+        else -> "MC Server"
+    }
+
     Scaffold(
+        topBar = {
+            if (isSubScreen) {
+                TopAppBar(
+                    title = { Text(currentTitle) },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                    )
+                )
+            } else {
+                CenterAlignedTopAppBar(
+                    title = {
+                        Text(
+                            text = currentTitle,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                    )
+                )
+            }
+        },
         bottomBar = {
             if (!isSubScreen) {
-                NavigationBar {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                    tonalElevation = 0.dp
+                ) {
                     bottomNavItems.forEach { screen ->
                         val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
                         NavigationBarItem(
                             icon = {
                                 Icon(
                                     imageVector = screen.icon,
-                                    contentDescription = screen.label
+                                    contentDescription = screen.label,
+                                    tint = if (selected) MaterialTheme.colorScheme.primary
+                                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                 )
                             },
-                            label = { Text(screen.label) },
+                            label = {
+                                Text(
+                                    text = screen.label,
+                                    color = if (selected) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            },
                             selected = selected,
                             onClick = {
                                 navController.navigate(screen.route) {
@@ -151,10 +214,18 @@ fun MainApp(
             navController = navController,
             startDestination = Screen.Home.route,
             modifier = Modifier.padding(innerPadding),
-            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(300)) + fadeIn(tween(300)) },
-            exitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(300)) + fadeOut(tween(300)) },
-            popEnterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(300)) + fadeIn(tween(300)) },
-            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(300)) + fadeOut(tween(300)) }
+            enterTransition = {
+                fadeIn(animationSpec = tween(200)) + scaleIn(initialScale = 0.95f)
+            },
+            exitTransition = {
+                fadeOut(animationSpec = tween(150)) + scaleOut(targetScale = 0.95f)
+            },
+            popEnterTransition = {
+                fadeIn(animationSpec = tween(200)) + scaleIn(initialScale = 0.95f)
+            },
+            popExitTransition = {
+                fadeOut(animationSpec = tween(150)) + scaleOut(targetScale = 0.95f)
+            }
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
