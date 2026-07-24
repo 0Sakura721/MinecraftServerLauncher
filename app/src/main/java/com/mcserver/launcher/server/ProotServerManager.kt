@@ -586,16 +586,14 @@ class ProotServerManager {
             val serverLog = File(dir, "server.log")
             if (serverLog.exists()) {
                 sb.appendLine("=== server.log (最近 5000 行) ===")
-                val lines = serverLog.readLines()
-                val recent = if (lines.size > 5000) lines.takeLast(5000) else lines
-                recent.forEach { sb.appendLine(it) }
+                tailLines(serverLog, 5000).forEach { sb.appendLine(it) }
                 sb.appendLine()
             }
 
             val latestLog = File(dir, "logs/latest.log")
             if (latestLog.exists()) {
                 sb.appendLine("=== logs/latest.log ===")
-                latestLog.readLines().takeLast(2000).forEach { sb.appendLine(it) }
+                tailLines(latestLog, 2000).forEach { sb.appendLine(it) }
                 sb.appendLine()
             }
 
@@ -603,7 +601,7 @@ class ProotServerManager {
             if (crashDir.exists()) {
                 crashDir.listFiles()?.sortedByDescending { it.lastModified() }?.take(3)?.forEach { crash ->
                     sb.appendLine("=== 崩溃报告: ${crash.name} ===")
-                    crash.readLines().take(100).forEach { sb.appendLine(it) }
+                    tailLines(crash, 100).forEach { sb.appendLine(it) }
                     sb.appendLine("... (截断)")
                     sb.appendLine()
                 }
@@ -630,8 +628,12 @@ class ProotServerManager {
             )
             val proc = prootProcessBuilder.start()
             proc.waitFor()
+        } catch (e: IllegalStateException) {
+            emit("> 命令发送失败：应用处于后台，请切回前台后重试")
+            L.w(TAG, "writeCommandToPipe: background restriction", e)
         } catch (e: Exception) {
             emit("> 命令发送失败：${e.message}")
+            L.w(TAG, "writeCommandToPipe failed", e)
         }
     }
 
@@ -709,5 +711,46 @@ class ProotServerManager {
 
     private fun emit(msg: String) {
         _consoleOutput.tryEmit(msg)
+    }
+
+    /** 从文件尾部读取最后 N 行（不一次性加载全文件，防 OOM） */
+    private fun tailLines(file: File, n: Int): List<String> {
+        return try {
+            // 小文件直接用 readLines
+            if (file.length() < 512 * 1024) {
+                val lines = file.readLines()
+                return if (lines.size > n) lines.takeLast(n) else lines
+            }
+            // 大文件：用 RandomAccessFile 从尾部回溯
+            val raf = java.io.RandomAccessFile(file, "r")
+            raf.use { rf ->
+                val buf = ArrayDeque<String>(n)
+                rf.seek(rf.length())
+                var pos = rf.length() - 1
+                val sb = StringBuilder()
+                while (pos >= 0 && buf.size < n) {
+                    rf.seek(pos)
+                    val c = rf.readByte().toInt().toChar()
+                    if (c == '\n' || pos == 0) {
+                        if (pos == 0) sb.insert(0, c)
+                        val line = sb.reverse().toString()
+                        if (line.isNotEmpty() || buf.isNotEmpty()) {
+                            buf.addFirst(line)
+                        }
+                        sb.clear()
+                    } else {
+                        sb.append(c)
+                    }
+                    pos--
+                }
+                buf.toList()
+            }
+        } catch (e: Exception) {
+            // 回退
+            try {
+                val lines = file.readLines()
+                lines.takeLast(n)
+            } catch (_: Exception) { emptyList() }
+        }
     }
 }

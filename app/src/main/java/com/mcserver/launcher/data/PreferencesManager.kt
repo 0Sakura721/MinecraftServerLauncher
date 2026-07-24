@@ -67,6 +67,7 @@ class PreferencesManager(private val context: Context) {
             put("id", config.id)
             put("name", config.name)
             put("jarPath", config.jarPath)
+            put("javaPath", config.javaPath)
             put("javaVersion", config.javaVersion)
             put("allocatedMemoryMB", config.allocatedMemoryMB)
             put("serverPort", config.serverPort)
@@ -99,6 +100,7 @@ class PreferencesManager(private val context: Context) {
             id = obj.optString("id", ""),
             name = obj.optString("name", "Minecraft Server"),
             jarPath = obj.optString("jarPath", ""),
+            javaPath = obj.optString("javaPath", ""),
             javaVersion = obj.optInt("javaVersion", 21),
             allocatedMemoryMB = obj.optInt("allocatedMemoryMB", 2048),
             serverPort = obj.optInt("serverPort", 25565),
@@ -133,6 +135,7 @@ class PreferencesManager(private val context: Context) {
                 put("id", "default")
                 put("name", prefs[KEY_SERVER_NAME] ?: "Minecraft Server")
                 put("jarPath", prefs[KEY_JAR_PATH] ?: "")
+                put("javaPath", "")  // 旧版无此字段
                 put("javaVersion", prefs[KEY_JAVA_VERSION] ?: 21)
                 put("allocatedMemoryMB", prefs[KEY_ALLOCATED_MEMORY] ?: prefs[KEY_MAX_RAM] ?: 2048)
                 put("serverPort", prefs[KEY_PORT] ?: 25565)
