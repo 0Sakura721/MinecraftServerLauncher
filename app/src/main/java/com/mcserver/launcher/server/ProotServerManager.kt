@@ -728,11 +728,11 @@ class ProotServerManager {
                 rf.seek(rf.length())
                 var pos = rf.length() - 1
                 val sb = StringBuilder()
-                while (pos >= 0 && buf.size < n) {
+                while (pos >= 0L && buf.size < n) {
                     rf.seek(pos)
                     val c = rf.readByte().toInt().toChar()
-                    if (c == '\n' || pos == 0) {
-                        if (pos == 0) sb.insert(0, c)
+                    if (c == '\n' || pos == 0L) {
+                        if (pos == 0L) sb.insert(0, c)
                         val line = sb.reverse().toString()
                         if (line.isNotEmpty() || buf.isNotEmpty()) {
                             buf.addFirst(line)
