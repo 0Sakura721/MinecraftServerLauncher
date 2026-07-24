@@ -108,7 +108,7 @@ fun ServerStatusCard(
                         onClick = onStop,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = extendedColors.error
+                            contentColor = MaterialTheme.colorScheme.error
                         )
                     ) {
                         Icon(
@@ -133,7 +133,7 @@ private fun StatusDot(state: ServerState) {
         ServerState.STARTING -> extendedColors.warning
         ServerState.RUNNING -> extendedColors.online
         ServerState.STOPPING -> extendedColors.warning
-        ServerState.ERROR -> extendedColors.error
+        ServerState.ERROR -> MaterialTheme.colorScheme.error
     }
     Surface(
         modifier = Modifier.size(12.dp),

@@ -701,13 +701,13 @@ fun ConsoleScreen() {
 private fun getConsoleLineColor(message: String, colors: ExtendedColorScheme): Color {
     return when {
         message.startsWith("> ") -> Color(0xFF58A6FF)
-        message.contains("FATAL") || message.contains("Exception") -> colors.error
-        message.contains("ERROR") || message.contains("Error") -> colors.error
+        message.contains("FATAL") || message.contains("Exception") -> Color(0xFFF85149)
+        message.contains("ERROR") || message.contains("Error") -> Color(0xFFF85149)
         message.contains("WARN") || message.contains("Warn") -> colors.warning
         message.contains("INFO") || message.contains("Info") -> Color(0xFF58A6FF)
         message.contains("DEBUG") || message.contains("Debug") -> Color(0xFF8B949E)
         message.contains("joined the game") -> colors.success
-        message.contains("left the game") -> colors.error
+        message.contains("left the game") -> Color(0xFFF85149)
         message.contains("<") && message.contains(">") -> Color(0xFFE6EDF3)
         message.contains("Done") || message.contains("done") -> colors.success
         message.contains("Starting") || message.contains("Loading") -> Color(0xFF79C0FF)

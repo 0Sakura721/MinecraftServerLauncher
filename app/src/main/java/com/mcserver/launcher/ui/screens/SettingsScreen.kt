@@ -44,6 +44,7 @@ fun SettingsScreen(
     var inputApiKey by remember { mutableStateOf(curseforgeApiKey) }
 
     var showJreProgress by remember { mutableStateOf(false) }
+    var jreProgress by remember { mutableFloatStateOf(0f) }
 
     var availableVersions by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedVersion by remember { mutableStateOf(serverManager.selectedJreVersion) }
@@ -75,7 +76,7 @@ fun SettingsScreen(
     showDeleteDialog?.let { version ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
-            icon = { Icon(Icons.Filled.DeleteForever, null, tint = extendedColors.error) },
+            icon = { Icon(Icons.Filled.DeleteForever, null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("删除 Java $version") },
             text = { Text("确定要删除已安装的 Java $version 运行时吗？此操作不可撤销。") },
             confirmButton = {
@@ -367,7 +368,7 @@ fun SettingsScreen(
                                         if (latency != null) {
                                             val color = when {
                                                 latency.isBest -> extendedColors.online
-                                                latency.latencyMs == Long.MAX_VALUE -> extendedColors.error
+                                                latency.latencyMs == Long.MAX_VALUE -> MaterialTheme.colorScheme.error
                                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
                                             }
                                             Text(
@@ -426,12 +427,12 @@ fun SettingsScreen(
                     if (loadError) {
                         Spacer(Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.CloudOff, null, Modifier.size(14.dp), tint = extendedColors.error)
+                            Icon(Icons.Filled.CloudOff, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 "无法连接网络，使用内置版本列表",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = extendedColors.error
+                                color = MaterialTheme.colorScheme.error
                             )
                         }
                     }
@@ -469,7 +470,7 @@ fun SettingsScreen(
                                 OutlinedButton(
                                     onClick = { serverManager.cancelDownload() },
                                     modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = extendedColors.error)
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                                 ) {
                                     Icon(Icons.Filled.Close, null, Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
@@ -523,7 +524,7 @@ fun SettingsScreen(
                                     Text("Java $v", style = MaterialTheme.typography.bodyMedium)
                                 }
                                 IconButton(onClick = { showDeleteDialog = v }) {
-                                    Icon(Icons.Filled.DeleteOutline, "删除", Modifier.size(20.dp), tint = extendedColors.error)
+                                    Icon(Icons.Filled.DeleteOutline, "删除", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
                                 }
                             }
                         }
@@ -718,7 +719,7 @@ private fun JreStatusRow(status: JreStatus, progress: Float, version: String) {
                 Text("解压中...", fontWeight = FontWeight.Medium)
             }
             JreStatus.ERROR -> {
-                Icon(Icons.Filled.Cancel, null, Modifier.size(20.dp), tint = extendedColors.error)
+                Icon(Icons.Filled.Cancel, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.width(8.dp))
                 Text("安装失败", fontWeight = FontWeight.Medium)
             }
