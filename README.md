@@ -6,6 +6,8 @@
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-1.7-green)
 ![minSdk](https://img.shields.io/badge/minSdk-27-orange)
 ![License](https://img.shields.io/badge/license-LGPLv3-blue)
+[![Issues](https://img.shields.io/github/issues/0Sakura721/Kaze-SLauncher?color=red)](https://github.com/0Sakura721/Kaze-SLauncher/issues)
+[![PRs](https://img.shields.io/github/issues-pr/0Sakura721/Kaze-SLauncher?color=green)](https://github.com/0Sakura721/Kaze-SLauncher/pulls)
 
 ## ✨ 功能特性
 
