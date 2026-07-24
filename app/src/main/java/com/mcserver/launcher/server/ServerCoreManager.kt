@@ -37,13 +37,14 @@ class ServerCoreManager {
     suspend fun fetchPaperVersions(): Result<List<CoreVersion>> = withContext(Dispatchers.IO) {
         try {
             val conn = URL("${CoreType.PAPER.apiBase}/projects/paper").openConnection() as HttpURLConnection
-            conn.connectTimeout = 10000; conn.readTimeout = 10000
-            conn.connect()
-            val json = JSONObject(conn.inputStream.bufferedReader().readText())
-            conn.disconnect()
-            val arr = json.getJSONArray("versions")
-            val list = (0 until arr.length()).map { CoreVersion(arr.getString(it)) }
-            Result.success(list.sortedByDescending { it.id })
+            try {
+                conn.connectTimeout = 10000; conn.readTimeout = 10000
+                conn.connect()
+                val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                val arr = json.getJSONArray("versions")
+                val list = (0 until arr.length()).map { CoreVersion(arr.getString(it)) }
+                Result.success(list.sortedByDescending { it.id })
+            } finally { conn.disconnect() }
         } catch (e: Exception) { Result.failure(e) }
     }
 
@@ -52,19 +53,20 @@ class ServerCoreManager {
         try {
             val conn = URL("${CoreType.PAPER.apiBase}/projects/paper/versions/$version/builds")
                 .openConnection() as HttpURLConnection
-            conn.connectTimeout = 10000; conn.readTimeout = 10000
-            conn.connect()
-            val json = JSONObject(conn.inputStream.bufferedReader().readText())
-            conn.disconnect()
-            val builds = json.getJSONArray("builds")
-            val list = (0 until builds.length()).map {
-                val b = builds.getJSONObject(it)
-                val buildId = b.getInt("build").toString()
-                val fileName = b.optJSONObject("downloads")?.optJSONObject("application")?.optString("name")
-                    ?: "paper-$version-$buildId.jar"
-                CoreBuild(buildId, "Build #$buildId", fileName)
-            }
-            Result.success(list.reversed()) // 最新构建在前
+            try {
+                conn.connectTimeout = 10000; conn.readTimeout = 10000
+                conn.connect()
+                val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                val builds = json.getJSONArray("builds")
+                val list = (0 until builds.length()).map {
+                    val b = builds.getJSONObject(it)
+                    val buildId = b.getInt("build").toString()
+                    val fileName = b.optJSONObject("downloads")?.optJSONObject("application")?.optString("name")
+                        ?: "paper-$version-$buildId.jar"
+                    CoreBuild(buildId, "Build #$buildId", fileName)
+                }
+                Result.success(list.reversed())
+            } finally { conn.disconnect() }
         } catch (e: Exception) { Result.failure(e) }
     }
 
@@ -77,13 +79,14 @@ class ServerCoreManager {
     suspend fun fetchPurpurVersions(): Result<List<CoreVersion>> = withContext(Dispatchers.IO) {
         try {
             val conn = URL("${CoreType.PURPUR.apiBase}/purpur").openConnection() as HttpURLConnection
-            conn.connectTimeout = 10000; conn.readTimeout = 10000
-            conn.connect()
-            val json = JSONObject(conn.inputStream.bufferedReader().readText())
-            conn.disconnect()
-            val arr = json.getJSONArray("versions")
-            val list = (0 until arr.length()).map { CoreVersion(arr.getString(it)) }
-            Result.success(list.sortedByDescending { it.id })
+            try {
+                conn.connectTimeout = 10000; conn.readTimeout = 10000
+                conn.connect()
+                val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                val arr = json.getJSONArray("versions")
+                val list = (0 until arr.length()).map { CoreVersion(arr.getString(it)) }
+                Result.success(list.sortedByDescending { it.id })
+            } finally { conn.disconnect() }
         } catch (e: Exception) { Result.failure(e) }
     }
 
@@ -96,15 +99,16 @@ class ServerCoreManager {
     suspend fun fetchFabricVersions(): Result<List<CoreVersion>> = withContext(Dispatchers.IO) {
         try {
             val conn = URL("${CoreType.FABRIC.apiBase}/versions/game").openConnection() as HttpURLConnection
-            conn.connectTimeout = 10000; conn.readTimeout = 10000
-            conn.connect()
-            val arr = JSONArray(conn.inputStream.bufferedReader().readText())
-            conn.disconnect()
-            val list = (0 until arr.length()).map {
-                val obj = arr.getJSONObject(it)
-                CoreVersion(obj.getString("version"), obj.optBoolean("stable", true))
-            }
-            Result.success(list)
+            try {
+                conn.connectTimeout = 10000; conn.readTimeout = 10000
+                conn.connect()
+                val arr = JSONArray(conn.inputStream.bufferedReader().readText())
+                val list = (0 until arr.length()).map {
+                    val obj = arr.getJSONObject(it)
+                    CoreVersion(obj.getString("version"), obj.optBoolean("stable", true))
+                }
+                Result.success(list)
+            } finally { conn.disconnect() }
         } catch (e: Exception) { Result.failure(e) }
     }
 
@@ -113,19 +117,23 @@ class ServerCoreManager {
         try {
             val loaderConn = URL("${CoreType.FABRIC.apiBase}/versions/loader/$mcVersion")
                 .openConnection() as HttpURLConnection
-            loaderConn.connectTimeout = 10000; loaderConn.readTimeout = 10000
-            loaderConn.connect()
-            val loaderJson = JSONArray(loaderConn.inputStream.bufferedReader().readText())
-            loaderConn.disconnect()
-            val loaderVersion = loaderJson.getJSONObject(0).getJSONObject("loader").getString("version")
+            val loaderVersion: String
+            try {
+                loaderConn.connectTimeout = 10000; loaderConn.readTimeout = 10000
+                loaderConn.connect()
+                val loaderJson = JSONArray(loaderConn.inputStream.bufferedReader().readText())
+                loaderVersion = loaderJson.getJSONObject(0).getJSONObject("loader").getString("version")
+            } finally { loaderConn.disconnect() }
 
             val installerConn = URL("${CoreType.FABRIC.apiBase}/versions/installer")
                 .openConnection() as HttpURLConnection
-            installerConn.connectTimeout = 10000; installerConn.readTimeout = 10000
-            installerConn.connect()
-            val installerJson = JSONArray(installerConn.inputStream.bufferedReader().readText())
-            installerConn.disconnect()
-            val installerVersion = installerJson.getJSONObject(0).getString("version")
+            val installerVersion: String
+            try {
+                installerConn.connectTimeout = 10000; installerConn.readTimeout = 10000
+                installerConn.connect()
+                val installerJson = JSONArray(installerConn.inputStream.bufferedReader().readText())
+                installerVersion = installerJson.getJSONObject(0).getString("version")
+            } finally { installerConn.disconnect() }
 
             val url = "https://meta.fabricmc.net/v2/versions/loader/$mcVersion/$loaderVersion/$installerVersion/server/jar"
             Result.success(url)
@@ -155,12 +163,14 @@ class ServerCoreManager {
         try {
             val manifestConn = URL("${CoreType.VANILLA.apiBase}/mc/game/version_manifest_v2.json")
                 .openConnection() as HttpURLConnection
-            manifestConn.connectTimeout = 10000; manifestConn.readTimeout = 10000
-            manifestConn.connect()
-            val manifest = JSONObject(manifestConn.inputStream.bufferedReader().readText())
-            manifestConn.disconnect()
+            val versions: JSONArray
+            try {
+                manifestConn.connectTimeout = 10000; manifestConn.readTimeout = 10000
+                manifestConn.connect()
+                val manifest = JSONObject(manifestConn.inputStream.bufferedReader().readText())
+                versions = manifest.getJSONArray("versions")
+            } finally { manifestConn.disconnect() }
 
-            val versions = manifest.getJSONArray("versions")
             var versionUrl = ""
             for (i in 0 until versions.length()) {
                 val v = versions.getJSONObject(i)
@@ -172,13 +182,13 @@ class ServerCoreManager {
             if (versionUrl.isEmpty()) return@withContext Result.failure(Exception("版本不存在"))
 
             val detailConn = URL(versionUrl).openConnection() as HttpURLConnection
-            detailConn.connectTimeout = 10000; detailConn.readTimeout = 10000
-            detailConn.connect()
-            val detail = JSONObject(detailConn.inputStream.bufferedReader().readText())
-            detailConn.disconnect()
-
-            val serverUrl = detail.getJSONObject("downloads").getJSONObject("server").getString("url")
-            Result.success(serverUrl)
+            try {
+                detailConn.connectTimeout = 10000; detailConn.readTimeout = 10000
+                detailConn.connect()
+                val detail = JSONObject(detailConn.inputStream.bufferedReader().readText())
+                val serverUrl = detail.getJSONObject("downloads").getJSONObject("server").getString("url")
+                Result.success(serverUrl)
+            } finally { detailConn.disconnect() }
         } catch (e: Exception) { Result.failure(e) }
     }
 
@@ -192,23 +202,31 @@ class ServerCoreManager {
         fileName: String,
         onProgress: (Float, Long, Long) -> Unit = { _, _, _ -> }
     ): Result<File> = withContext(Dispatchers.IO) {
+        var fos: FileOutputStream? = null
+        var input: java.io.InputStream? = null
+        var connection: HttpURLConnection? = null
         try {
             targetDir.mkdirs()
             val targetFile = File(targetDir, fileName)
             val tempFile = File(targetDir, "$fileName.part")
 
             var downloaded = if (tempFile.exists()) tempFile.length() else 0L
-            val fos = FileOutputStream(tempFile, downloaded > 0)
+            fos = FileOutputStream(tempFile, downloaded > 0)
 
-            var connection = URL(url).openConnection() as HttpURLConnection
+            connection = URL(url).openConnection() as HttpURLConnection
             connection.connectTimeout = 30000; connection.readTimeout = 300000
             if (downloaded > 0) {
                 connection.setRequestProperty("Range", "bytes=$downloaded-")
                 connection.connect()
                 if (connection.responseCode != 206) {
-                    // 服务器不支持断点续传，重新下载
                     downloaded = 0
                     tempFile.delete()
+                    fos.close()
+                    fos = FileOutputStream(tempFile)
+                    connection.disconnect()
+                    connection = URL(url).openConnection() as HttpURLConnection
+                    connection.connectTimeout = 30000; connection.readTimeout = 300000
+                    connection.connect()
                 }
             } else {
                 connection.connect()
@@ -216,44 +234,43 @@ class ServerCoreManager {
 
             val totalSize = if (downloaded > 0) {
                 connection.getHeaderField("Content-Range")?.let {
-                    val total = it.substringAfter("/").toLongOrNull()
-                    total
+                    it.substringAfter("/").toLongOrNull()
                 } ?: (connection.contentLength + downloaded)
             } else {
                 connection.contentLength.toLong().let { if (it <= 0) -1L else it }
             }
 
-            val input = connection.inputStream
+            input = connection.inputStream
             val buffer = ByteArray(16384)
             var bytesRead: Int
             var lastReportTime = System.currentTimeMillis()
             var lastReportBytes = downloaded
 
-            while (input.read(buffer).also { bytesRead = it } != -1) {
-                fos.write(buffer, 0, bytesRead)
+            while (input!!.read(buffer).also { bytesRead = it } != -1) {
+                fos!!.write(buffer, 0, bytesRead)
                 downloaded += bytesRead
-
                 val now = System.currentTimeMillis()
                 if (now - lastReportTime >= 200) {
                     val speed = if (now > lastReportTime) ((downloaded - lastReportBytes) * 1000L / (now - lastReportTime)) else 0L
-                    lastReportTime = now
-                    lastReportBytes = downloaded
-
+                    lastReportTime = now; lastReportBytes = downloaded
                     val progress = if (totalSize > 0) (downloaded.toFloat() / totalSize).coerceIn(0f, 1f) else -1f
                     onProgress(progress, downloaded, if (totalSize > 0) totalSize else downloaded * 2)
                 }
             }
 
-            fos.close()
-            input.close()
-            connection.disconnect()
+            fos.close(); fos = null
+            input.close(); input = null
+            connection.disconnect(); connection = null
 
-            // 下载完成，重命名
             if (targetFile.exists()) targetFile.delete()
             tempFile.renameTo(targetFile)
             Result.success(targetFile)
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            try { fos?.close() } catch (_: Exception) {}
+            try { input?.close() } catch (_: Exception) {}
+            try { connection?.disconnect() } catch (_: Exception) {}
         }
     }
 
@@ -265,45 +282,32 @@ class ServerCoreManager {
      */
     suspend fun fetchForgeVersions(mcVersion: String): Result<List<String>> = withContext(Dispatchers.IO) {
         try {
-            // Forge 的版本格式: mcVersion-forgeVersion
-            // 例如: 1.20.1-47.2.0
             val url = "https://files.minecraftforge.net/net/minecraftforge/forge/index_$mcVersion.html"
             val conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 15000; conn.readTimeout = 15000
-            conn.setRequestProperty("User-Agent", "MCServerLauncher/1.0")
-            conn.connect()
-
-            val html = conn.inputStream.bufferedReader().readText()
-            conn.disconnect()
-
-            // 从 HTML 中提取版本号
-            val versions = mutableListOf<String>()
-            val pattern = Regex("""${Regex.escape(mcVersion)}-(\d+\.\d+\.\d+)""")
-            pattern.findAll(html).forEach { match ->
-                versions.add(match.value)
-            }
-            // 去重并排序（最新在前）
-            Result.success(versions.distinct().sortedDescending())
+            try {
+                conn.connectTimeout = 15000; conn.readTimeout = 15000
+                conn.setRequestProperty("User-Agent", "MCServerLauncher/1.0")
+                conn.connect()
+                val html = conn.inputStream.bufferedReader().readText()
+                val versions = mutableListOf<String>()
+                val pattern = Regex("""${Regex.escape(mcVersion)}-(\d+\.\d+\.\d+)""")
+                pattern.findAll(html).forEach { match -> versions.add(match.value) }
+                Result.success(versions.distinct().sortedDescending())
+            } finally { conn.disconnect() }
         } catch (e: Exception) {
-            // 回退：使用 Forge Maven metadata
             try {
                 val mavenUrl = "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml"
                 val conn = URL(mavenUrl).openConnection() as HttpURLConnection
-                conn.connectTimeout = 10000; conn.readTimeout = 10000
-                conn.connect()
-
-                val xml = conn.inputStream.bufferedReader().readText()
-                conn.disconnect()
-
-                val versions = mutableListOf<String>()
-                val pattern = Regex("""<version>(${Regex.escape(mcVersion)}[^<]*)</version>""")
-                pattern.findAll(xml).forEach { match ->
-                    versions.add(match.groupValues[1])
-                }
-                Result.success(versions.distinct().sortedDescending())
-            } catch (e2: Exception) {
-                Result.failure(e2)
-            }
+                try {
+                    conn.connectTimeout = 10000; conn.readTimeout = 10000
+                    conn.connect()
+                    val xml = conn.inputStream.bufferedReader().readText()
+                    val versions = mutableListOf<String>()
+                    val pattern = Regex("""<version>(${Regex.escape(mcVersion)}[^<]*)</version>""")
+                    pattern.findAll(xml).forEach { match -> versions.add(match.groupValues[1]) }
+                    Result.success(versions.distinct().sortedDescending())
+                } finally { conn.disconnect() }
+            } catch (e2: Exception) { Result.failure(e2) }
         }
     }
 
@@ -338,18 +342,15 @@ class ServerCoreManager {
         try {
             val url = "https://maven.neoforged.net/net/neoforged/neoforge/maven-metadata.xml"
             val conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 10000; conn.readTimeout = 10000
-            conn.connect()
-
-            val xml = conn.inputStream.bufferedReader().readText()
-            conn.disconnect()
-
-            val versions = mutableListOf<String>()
-            val pattern = Regex("""<version>(${Regex.escape(mcVersion)}[^<]*)</version>""")
-            pattern.findAll(xml).forEach { match ->
-                versions.add(match.groupValues[1])
-            }
-            Result.success(versions.distinct().sortedDescending())
+            try {
+                conn.connectTimeout = 10000; conn.readTimeout = 10000
+                conn.connect()
+                val xml = conn.inputStream.bufferedReader().readText()
+                val versions = mutableListOf<String>()
+                val pattern = Regex("""<version>(${Regex.escape(mcVersion)}[^<]*)</version>""")
+                pattern.findAll(xml).forEach { match -> versions.add(match.groupValues[1]) }
+                Result.success(versions.distinct().sortedDescending())
+            } finally { conn.disconnect() }
         } catch (e: Exception) { Result.failure(e) }
     }
 

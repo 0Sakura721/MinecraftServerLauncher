@@ -8,6 +8,11 @@ local.properties
 *.aapt2.wrapper
 *.keystore
 keystore.properties
+.DS_Store
+*.log
+*.bak
+*.swp
+*.swo
 # 例外：项目自带的 release keystore 提交到 git，
 # 让本地和 CI 用同一份签名，保证覆盖安装不会因签名不同而失败
 !app/release-keystore.jks

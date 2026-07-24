@@ -17,25 +17,21 @@ object SpigotBuildManager {
     suspend fun fetchVersions(): Result<List<SpigotVersion>> = withContext(Dispatchers.IO) {
         try {
             val conn = URL("https://hub.spigotmc.org/versions/").openConnection() as HttpURLConnection
-            conn.connectTimeout = 10000; conn.readTimeout = 10000
-            conn.setRequestProperty("User-Agent", "MCServerLauncher/1.0")
-            conn.connect()
-            val html = conn.inputStream.bufferedReader().readText()
-            conn.disconnect()
-
-            // 从HTML中提取版本号，格式如: <a href="1.21.json">1.21</a>
-            val versions = mutableListOf<SpigotVersion>()
-            val pattern = Regex("""<a\s+href="([^"]+\.json)">([^<]+)</a>""")
-            pattern.findAll(html).forEach { match ->
-                val fileName = match.groupValues[1]
-                val version = match.groupValues[2].trim()
-                if (fileName.endsWith(".json")) {
-                    versions.add(SpigotVersion(version))
+            try {
+                conn.connectTimeout = 10000; conn.readTimeout = 10000
+                conn.setRequestProperty("User-Agent", "MCServerLauncher/1.0")
+                conn.connect()
+                val html = conn.inputStream.bufferedReader().readText()
+                val versions = mutableListOf<SpigotVersion>()
+                val pattern = Regex("""<a\s+href="([^"]+\.json)">([^<]+)</a>""")
+                pattern.findAll(html).forEach { match ->
+                    val fileName = match.groupValues[1]
+                    val version = match.groupValues[2].trim()
+                    if (fileName.endsWith(".json")) versions.add(SpigotVersion(version))
                 }
-            }
-            Result.success(versions.sortedByDescending { it.version })
+                Result.success(versions.sortedByDescending { it.version })
+            } finally { conn.disconnect() }
         } catch (e: Exception) {
-            // 回退到已知版本列表
             val fallback = listOf(
                 "1.21.5", "1.21.4", "1.21.3", "1.21.1", "1.21",
                 "1.20.6", "1.20.4", "1.20.2", "1.20.1", "1.20",
